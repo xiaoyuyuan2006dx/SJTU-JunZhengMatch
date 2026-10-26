@@ -716,7 +716,7 @@ async function loadDbStats() {
         .map(
           (c) => `
           <div style="padding:10px 14px;border:1px solid var(--border-light);border-radius:var(--radius-sm);background:var(--bg-warm-tint);display:flex;justify-content:space-between;align-items:center;cursor:pointer;"
-               onclick="filterByCollege('${escapeHtml(c.name)}')">
+               data-college="${escapeHtml(c.name)}" onclick="filterByCollege(this.dataset.college)">
             <span style="font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(c.name)} (${escapeHtml(c.short)})">${escapeHtml(c.name)}</span>
             <span class="badge badge-info" style="flex-shrink:0;margin-left:6px;">${c.count} 人</span>
           </div>

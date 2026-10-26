@@ -1,4 +1,5 @@
 import base64
+from contextlib import closing
 import csv
 import http.cookiejar
 import io
@@ -96,6 +97,22 @@ class APITests(unittest.TestCase):
         request=urllib.request.Request(self.url+path,data=json.dumps(data).encode() if data is not None else None,headers=h)
         with (client or self.client).open(request,timeout=20) as response:return response.read()
 
+    def test_untrusted_hostname_rejected(self):
+        with self.assertRaises(urllib.error.HTTPError) as error:self.call('/api/db/stats',headers={'Host':'untrusted.invalid'})
+        self.assertEqual(error.exception.code,403);error.exception.close()
+    def test_configured_password_is_required(self):
+        from unittest.mock import patch
+        with patch.dict(os.environ,{'JZ_PASSWORD':'test-only-password'}):
+            with self.assertRaises(urllib.error.HTTPError) as error:self.call('/api/db/stats')
+            self.assertEqual(error.exception.code,401);error.exception.close()
+            auth=base64.b64encode(b'user:test-only-password').decode()
+            self.assertIn('total',json.loads(self.call('/api/db/stats',headers={'Authorization':'Basic '+auth})))
+    def test_database_export_formula_like_names_are_literal(self):
+        item=web.create_faculty({'name':'=FAKE_FORMULA()','title':'副教授'})
+        try:
+            data=self.call('/api/db/export_csv').decode('utf-8-sig')
+            self.assertIn("'=FAKE_FORMULA()",data)
+        finally:web.delete_faculty(item['id'])
     def test_health(self):self.assertEqual(json.loads(self.call('/health'))['status'],'ok')
     def test_example_and_template_downloads(self):
         for kind in ('student','teacher','example'):
@@ -114,12 +131,13 @@ class APITests(unittest.TestCase):
         self.call('/api/match/run',{'use_sample':True})
         other=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
         with self.assertRaises(urllib.error.HTTPError) as error:self.call('/api/match/export?format=csv',client=other)
-        self.assertEqual(error.exception.code,400)
+        self.assertEqual(error.exception.code,400);error.exception.close()
     def test_cross_origin_write_rejected(self):
         with self.assertRaises(urllib.error.HTTPError) as error:self.call('/api/match/run',{'use_sample':True},headers={'Origin':'https://untrusted.invalid'})
-        self.assertEqual(error.exception.code,403)
+        self.assertEqual(error.exception.code,403);error.exception.close()
     def test_invalid_parameters_rejected(self):
-        with self.assertRaises(urllib.error.HTTPError):self.call('/api/match/run',{'use_sample':True,'params':{'pick_count':100000}})
+        with self.assertRaises(urllib.error.HTTPError) as error:self.call('/api/match/run',{'use_sample':True,'params':{'pick_count':100000}})
+        error.exception.close()
     def test_layout_samples_cover_all_pages(self):
         first=json.loads(self.call('/api/db/list?page=1&page_size=5'))
         second=json.loads(self.call('/api/db/list?page=2&page_size=5'))
@@ -134,3 +152,53 @@ class APITests(unittest.TestCase):
 
 
 if __name__=='__main__':unittest.main()
+
+class ReviewRegressionTests(unittest.TestCase):
+    def setUp(self):
+        from unittest.mock import patch
+        import shutil
+        self.folder=tempfile.TemporaryDirectory()
+        self.path=Path(self.folder.name)/'faculty.db'
+        shutil.copyfile(Path(web.SCRIPT_DIR)/'data/faculty.db',self.path)
+        self.patch=patch.object(web,'DB_PATH',self.path);self.patch.start()
+        with closing(sqlite3.connect(self.path)) as conn:
+            conn.execute('DELETE FROM faculty')
+            conn.executemany('INSERT INTO faculty(id,teacher_id,name,title,department,college) VALUES(?,?,?,?,?,?)',[
+                (1,2,'同名教师','副教授','计算机学院','计算机学院'),
+                (2,3,'同名教师','副教授','材料科学与工程学院','材料科学与工程学院')])
+            conn.commit()
+    def tearDown(self):
+        self.patch.stop();self.folder.cleanup()
+    def test_delete_uses_exact_primary_key(self):
+        self.assertEqual(web.delete_faculty(2)['deleted'],1)
+        with closing(sqlite3.connect(self.path)) as conn:self.assertEqual(conn.execute('SELECT id FROM faculty').fetchall(),[(1,)])
+    def test_update_uses_exact_primary_key(self):
+        web.update_faculty(2,{'name':'指定教师'})
+        with closing(sqlite3.connect(self.path)) as conn:self.assertEqual(conn.execute('SELECT name FROM faculty ORDER BY id').fetchall(),[('同名教师',),('指定教师',)])
+    def test_explicit_teacher_id_lookup(self):
+        self.assertEqual(web.delete_faculty(2,by_teacher_id=True)['deleted'],1)
+        with closing(sqlite3.connect(self.path)) as conn:self.assertEqual(conn.execute('SELECT id FROM faculty').fetchall(),[(2,)])
+    def test_empty_name_update_rejected(self):
+        with self.assertRaisesRegex(ValueError,'姓名'):web.update_faculty(1,{'name':''})
+    def test_merge_matches_existing_department_among_namesakes(self):
+        data='姓名,院系,研究方向\n同名教师,材料科学与工程学院,储能研究\n'.encode('utf-8-sig')
+        result=web.merge_teachers_from_bytes(data,'teachers.csv',dry_run=False)
+        self.assertEqual(result['merged_same_dept_count'],1)
+        with closing(sqlite3.connect(self.path)) as conn:
+            self.assertEqual(conn.execute('SELECT COUNT(*) FROM faculty').fetchone()[0],2)
+            self.assertEqual(conn.execute('SELECT research_direction FROM faculty WHERE id=2').fetchone()[0],'储能研究')
+    def test_running_maintenance_blocks_mutation(self):
+        from unittest.mock import patch
+        with patch.object(web,'TASKS',{'probe':{'status':'running'}}):
+            with self.assertRaisesRegex(ValueError,'运行中'):web.delete_faculty(1)
+    def test_missing_advisor_rejected(self):
+        rows=[xio.STUDENT_BASE_COLS,['1','信息技术类','张三','52x0001','图像研究','','计算机学院']]
+        with self.assertRaisesRegex(ValueError,'导师姓名'):xio.parse_students_from_rows(rows)
+    def test_blank_student_template_has_no_matching_rows(self):
+        with self.assertRaisesRegex(ValueError,'没有有效学生'):xio.parse_students_from_rows([xio.STUDENT_BASE_COLS])
+    def test_sparse_extreme_column_is_rejected(self):
+        data=io.BytesIO()
+        with zipfile.ZipFile(data,'w') as z:
+            z.writestr('xl/worksheets/sheet1.xml',f'<worksheet xmlns="{xio.NS_MAIN}"><sheetData><row><c r="ZZZ1" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>')
+        data.seek(0)
+        with self.assertRaisesRegex(ValueError,'256列'):xio.read_xlsx_rows(data)

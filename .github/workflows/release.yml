@@ -5,6 +5,12 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "发布版本号，例如 v1.0.0；留空则只构建、不发布"
+        required: false
+        type: string
+        default: ""
 permissions:
   contents: read
 jobs:
@@ -15,13 +21,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Validate optional release version
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+        run: python -c "import os,re; v=os.getenv('RELEASE_VERSION',''); assert not v or re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?',v), 'Version must look like v1.0.0'"
       - run: pip install -r requirements-dev.txt
       - run: python -m unittest discover -s tests -v
       - run: python entrypoint.py --self-test --report self-test.json
       - run: python tools/privacy_check.py
+      - run: python tools/verify_app.py --report http-self-test.json
   windows:
     needs: test
     runs-on: windows-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -40,7 +52,14 @@ jobs:
           New-Item -ItemType Directory -Force release | Out-Null
           Copy-Item dist/JunZhengMatch.exe release/
           Copy-Item WINDOWS.md release/Windows-使用说明.md
+          Copy-Item README.md,ARCHITECTURE.md,ASSETS.md,RELEASING.md release/
           Get-FileHash release/JunZhengMatch.exe -Algorithm SHA256 | Format-List | Out-File release/Windows-SHA256.txt
+      - run: python tools/verify_app.py --exe dist/JunZhengMatch.exe --report exe-http-test.json
+      - name: Package portable Windows download
+        shell: pwsh
+        run: |
+          Copy-Item exe-self-test.json,exe-http-test.json release/
+          Compress-Archive -Path release/* -DestinationPath release/SJTU-JunZhengMatch-Windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: windows-exe
@@ -66,7 +85,7 @@ jobs:
           name: docker-image
           path: release/*
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release_version != '')
     needs: [windows, docker]
     runs-on: ubuntu-latest
     permissions:
@@ -80,7 +99,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.release_version || github.ref_name }}
         run: |
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --generate-notes
+          existing=$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha 2>/dev/null || true)
+          if [ -n "$existing" ] && [ "$existing" != "$GITHUB_SHA" ]; then echo "Version already points to another commit; choose a new version."; exit 1; fi
+          (cd release && sha256sum *.exe *.zip *.tar.gz > SHA256SUMS.txt)
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --generate-notes --draft
           gh release upload "$TAG" release/* --clobber
+          gh release edit "$TAG" --draft=false

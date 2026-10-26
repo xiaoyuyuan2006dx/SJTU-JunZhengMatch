@@ -6,7 +6,7 @@ TaroDeluxe · Codex & SJTU ZhuXueBu & CTP
 
 ## 使用
 
-Windows 用户在 [Releases](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases) 下载 `JunZhengMatch.exe`，双击后在浏览器中操作，无需安装 Python。源码也可运行：
+Windows 发行文件由 GitHub Actions 构建并验证。发布后，在 [Releases](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases) 下载 `JunZhengMatch.exe` 或 Windows ZIP 包，双击 EXE 后在浏览器中操作，无需安装 Python。若暂时没有发行附件，可以先运行源码：
 
 ```bash
 python -m pip install -r requirements.txt
@@ -17,7 +17,7 @@ python entrypoint.py
 
 ## 输入格式
 
-可直接在页面下载空白 XLSX/CSV 模板，或下载“示例模板（虚构数据）”。示例里的学生、学号、导师均为虚构；发布自带现有网络公开教师库，解压运行即可匹配。
+可直接在页面下载空白 XLSX/CSV 模板，或点击“下载示例模板”。示例学生使用张三、李四、王五、赵六、孙七、周八，学号以 `52x` 开头，导师为陈老师等虚构信息；发布自带现有网络公开教师库，解压运行即可匹配。
 
 表头如下，列顺序可以调整：
 
@@ -31,7 +31,11 @@ python entrypoint.py
 | 导师姓名 | 必填，用于回避指导老师 |
 | 导师院系 | 选填，也接受“导师学院” |
 
-支持单横行名单和首行带任务说明、每人占三行的合并表。仅读取第一张工作表；公式字段需要 Excel 已保存的计算结果，不会执行公式或宏。仅支持 `.xlsx` 和 `.csv`；请保持学生姓名、课题和导师姓名在同一数据行。
+示例课题类别沿用原表的五类：人文社科类、信息技术类、机械控制自动化类、生农医药类、能源化工材料类。上传文件的类别原样保留，不自动生成类别。
+
+空白模板只有一行表头，没有真实学生记录；填写后再上传。学生姓名、课题中文和导师姓名缺失会报出所在行，避免缺少导师信息导致无法回避。
+
+支持单横行名单和首行带任务说明、每人占三行的合并表。XLSX最多读取10000行、256列及200万个矩形单元格，解压内容上限100MB。仅读取第一张工作表；公式字段需要 Excel 已保存的计算结果，不会执行公式或宏。仅支持 `.xlsx` 和 `.csv`；请保持学生姓名、课题和导师姓名在同一数据行。
 
 ## 两种导出
 
@@ -68,11 +72,13 @@ JZ_PASSWORD='请改为至少12字符的实际密码' docker compose up -d --buil
 
 Compose 默认仅映射主机本地端口，并持久化 `/data`。服务器对非本机地址监听时必须设置至少12字符的 `JZ_PASSWORD`，浏览器使用 HTTP Basic 登录（用户名可任意填写）。公网访问应由管理员配置 HTTPS 反向代理。
 
-Release 同时提供验证过的 Docker 镜像归档，可使用 `docker load -i SJTU-JunZhengMatch-Docker.tar.gz` 导入。不向未知 Docker Hub 账户推送镜像。
+发布工作流成功后，Release 同时提供经过构建和启动检查的 Docker 镜像归档，可使用 `docker load -i SJTU-JunZhengMatch-Docker.tar.gz` 导入。不向未知 Docker Hub 账户推送镜像。
 
 ## Windows EXE 与 CI
 
-GitHub Actions 在原生 Windows runner 上使用 PyInstaller 生成单文件、无控制台 EXE，并执行内置虚构学生数据的自检。Linux runner 构建并验证 Docker 镜像。推送 `v*` 标签后，只有全部测试和构建成功才发布 EXE、镜像归档与校验值。具体操作见 [Windows 使用说明](WINDOWS.md)。
+GitHub Actions 在原生 Windows x64 runner 上使用 PyInstaller 生成单文件、无控制台 EXE，程序包含 Python 运行时、前端和737条公开教师记录。构建后执行内置自检，并启动真实 EXE，检查页面、图片、文档、示例匹配和两种导出。Linux runner 构建并验证 Docker 镜像。
+
+只有测试、Windows 和 Docker 三部分全部成功，工作流才先上传附件到草稿 Release，再公开发布；失败时保留构建日志。推送 `v*` 标签可触发，也可直接在 GitHub 的 Actions 页面选择版本号发布，无需本地 Windows 环境。具体点击步骤见 [发布指南](RELEASING.md)，日常使用见 [Windows 使用说明](WINDOWS.md)。
 
 开发验证：
 
@@ -81,8 +87,11 @@ python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -v
 python entrypoint.py --self-test --report self-test.json
 python tools/privacy_check.py
+python tools/verify_app.py --report http-self-test.json
 ```
 
 ## 视觉说明
 
-保留暖米白与浅杏风格，加入自制金色星结、奶油金按钮等“藤田琴音”灵感细节；没有打包官方角色图片、音乐或其他素材，不代表官方关联。角色参考页：[藤田ことね](https://gakuen.idolmaster-official.jp/idol/kotone/)。
+保留暖米白与浅杏风格，加入金色星结、奶油金按钮，以及用户选定的琴音小人图片。图片原样随前端打包，不需要联网加载；来源说明见 [ASSETS.md](ASSETS.md)。
+
+装饰位于页面侧边背景，使用淡化和正片叠底，不接受鼠标点击。窗口宽度不足1480px时隐藏，避免遮挡表格。右下角水印为 `TaroDeluxe · Codex & SJTU ZhuXueBu & CTP`。

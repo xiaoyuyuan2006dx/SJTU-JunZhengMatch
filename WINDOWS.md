@@ -1,6 +1,6 @@
 # Windows 使用说明
 
-1. 下载 Release 中的 `JunZhengMatch.exe`。
+1. 在已发布版本的Release附件中下载 `JunZhengMatch.exe`，或下载并解压 `SJTU-JunZhengMatch-Windows-x64.zip`。GitHub自动生成的Source code压缩包仅包含源码。
 2. 双击运行，浏览器自动打开 `http://127.0.0.1:8765`。
 3. 下载空白模板填写，或使用虚构示例试跑。上传后点击匹配预览，再选择 CSV 或 Excel 导出。
 4. 若端口冲突，可创建快捷方式，在目标末尾加 `--port 8080`。
@@ -12,3 +12,5 @@
 程序在浏览器关闭后仍运行。需要停止时，可在任务管理器中结束 `JunZhengMatch.exe`；再次双击会复用已运行的本机服务。导出的学生文件请由使用者自行管理。
 
 公开服务并非默认行为。需要局域网部署时，由管理员配置至少12字符访问密码及相应网络限制。参数说明见README。
+
+维护者如何发布新版，请阅读 [RELEASING.md](RELEASING.md)。

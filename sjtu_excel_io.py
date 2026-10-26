@@ -136,11 +136,13 @@ def read_xlsx_rows(file_bytes_or_path):
         parsed_rows = []
 
         for r_el in sheet_root.findall(".//s:row", ns):
+            if len(parsed_rows)>=10000:raise ValueError("工作表超过10000行，请拆分上传。")
             row_dict = {}
             for c_el in r_el.findall("s:c", ns):
                 ref = c_el.attrib.get("r", "")
                 m = re.match(r"([A-Z]+)(\d+)", ref)
                 c_idx = col_letter_to_index(m.group(1)) if m else len(row_dict)
+                if c_idx>=256:raise ValueError("工作表超过256列，请移除无用列后重试。")
                 t = c_el.attrib.get("t", "")
                 v_el = c_el.find("s:v", ns)
                 is_el = c_el.find("s:is", ns)
@@ -156,6 +158,7 @@ def read_xlsx_rows(file_bytes_or_path):
                     max_col = c_idx + 1
             parsed_rows.append(row_dict)
 
+        if len(parsed_rows)*max_col>2000000:raise ValueError("表格单元格过多，请移除无用行列后重试。")
         for row_dict in parsed_rows:
             row_list = [row_dict.get(i, "") for i in range(max_col)]
             rows_data.append(row_list)
@@ -247,6 +250,8 @@ def parse_students_from_rows(rows):
             except ValueError:
                 continue
 
+        missing=[label for label,value in [("学生姓名",name_str),("课题中文",topic_str),("导师姓名",advisor_str)] if not value]
+        if missing:raise ValueError(f"第{r_idx+1}行缺少：{'、'.join(missing)}")
         students.append({
             "row_idx": r_idx,
             "seq": seq_val,
@@ -258,6 +263,7 @@ def parse_students_from_rows(rows):
             "advisor_dept": get_col("导师院系") or get_col("导师学院") or get_col("学院"),
         })
 
+    if not students:raise ValueError("表格中没有有效学生记录，请填写学生信息后再上传。")
     return students, headers, banner_text
 
 

@@ -8,3 +8,9 @@ dist
 *.log
 .env
 tests
+
+*.xlsx
+*.xls
+*.csv
+**/*.db
+!data/faculty.db

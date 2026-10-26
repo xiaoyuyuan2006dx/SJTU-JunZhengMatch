@@ -6,6 +6,7 @@ SJTU 䇹政盲审导师自动匹配与数据库维护 Web 平台后端
   python3 web_server.py --port 8080
 """
 import argparse
+from functools import wraps
 from contextlib import closing
 import secrets
 import hmac
@@ -81,6 +82,16 @@ COLUMN_MAP = {
 }
 EXCLUDE_COLS = ["导师", "学生", "指导", "课题", "序号"]
 DB_FIELDS = ["title", "department", "college", "email", "phone", "mobile", "research_direction", "profile_url", "profile_text"]
+
+
+def database_mutation(function):
+    @wraps(function)
+    def locked(*args, **kwargs):
+        with DB_WRITE_LOCK:
+            if any(t.get("status")=="running" for t in TASKS.values()):
+                raise ValueError("维护脚本运行中，暂不能修改数据库或启动其他脚本。")
+            return function(*args, **kwargs)
+    return locked
 
 
 def current_match_session():
@@ -227,6 +238,7 @@ def query_faculty(keyword="", department="", title="", research="", exclude_seni
         conn.close()
 
 
+@database_mutation
 def create_faculty(data):
     name = (data.get("name") or "").strip()
     if not name:
@@ -262,11 +274,14 @@ def create_faculty(data):
         conn.close()
 
 
-def update_faculty(record_id, data):
+@database_mutation
+def update_faculty(record_id, data, by_teacher_id=False):
+    if not str(data.get("name") or "").strip():raise ValueError("教师姓名不能为空")
     conn = get_db_conn()
     try:
         cur = conn.cursor()
-        row = cur.execute("SELECT id, teacher_id FROM faculty WHERE id = ? OR teacher_id = ?", (record_id, record_id)).fetchone()
+        key = "teacher_id" if by_teacher_id else "id"
+        row = cur.execute(f"SELECT id, teacher_id FROM faculty WHERE {key} = ?", (record_id,)).fetchone()
         if not row:
             raise ValueError("未找到该教师记录")
         pk = row["id"]
@@ -299,11 +314,13 @@ def update_faculty(record_id, data):
         conn.close()
 
 
-def delete_faculty(record_id):
+@database_mutation
+def delete_faculty(record_id, by_teacher_id=False):
     conn = get_db_conn()
     try:
         cur = conn.cursor()
-        cur.execute("DELETE FROM faculty WHERE id = ? OR teacher_id = ?", (record_id, record_id))
+        key = "teacher_id" if by_teacher_id else "id"
+        cur.execute(f"DELETE FROM faculty WHERE {key} = ?", (record_id,))
         deleted = cur.rowcount
         conn.commit()
         return {"deleted": deleted}
@@ -315,6 +332,7 @@ def run_match_pipeline(file_bytes, filename, params):
     """
     执行盲审导师匹配流水线，支持全部 CLI 参数
     """
+    if not isinstance(params,dict):raise ValueError("匹配参数必须为对象")
     rows = xio.read_tabular_rows(file_bytes, filename)
     all_students, headers, banner_text = xio.parse_students_from_rows(rows)
     for s in all_students:
@@ -451,6 +469,7 @@ def run_match_pipeline(file_bytes, filename, params):
     }
 
 
+@database_mutation
 def merge_teachers_from_bytes(file_bytes, filename, dry_run=True, conflict_policy="richer"):
     """
     增量合并外部 Excel/CSV 教师数据到数据库（保留 sjtu_merge_teachers.py 四路分类逻辑）：
@@ -459,6 +478,7 @@ def merge_teachers_from_bytes(file_bytes, filename, dry_run=True, conflict_polic
     3. DB 有此姓名 + 不同院系 -> 当作同名不同人追加 (appended)
     4. 院系信息缺失无法判断 -> 根据 conflict_policy ('richer' 合并 / 'add' 新增 / 'skip' 跳过)
     """
+    if conflict_policy not in ("richer","add","skip"):raise ValueError("未知增量合并策略")
     rows = xio.read_tabular_rows(file_bytes, filename)
     if not rows:
         raise ValueError("上传的教师表格为空")
@@ -526,8 +546,8 @@ def merge_teachers_from_bytes(file_bytes, filename, dry_run=True, conflict_polic
             if not db_rows:
                 adds.append(rec)
             else:
-                dbr = db_rows[0]
                 d1 = qdb.clean_college_full(rec.get("department") or rec.get("college") or "")
+                dbr = next((row for row in db_rows if d1 and qdb.short_college(d1)==qdb.short_college(row.get("department") or row.get("college") or "")),db_rows[0])
                 d2 = qdb.clean_college_full(dbr.get("department") or dbr.get("college") or "")
                 if d1 and d2:
                     if qdb.short_college(d1) == qdb.short_college(d2) or d1 == d2:
@@ -600,6 +620,7 @@ def merge_teachers_from_bytes(file_bytes, filename, dry_run=True, conflict_polic
         conn.close()
 
 
+@database_mutation
 def start_script_task(script_key, options):
     """
     启动爬虫或补全脚本任务（保留已有全部脚本及参数接口）：
@@ -651,10 +672,12 @@ def start_script_task(script_key, options):
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(DATA_DIR),
-                env={**os.environ,"JZ_DATA_DIR":str(DATA_DIR),"FACULTY_DB":str(DB_PATH)},
+                env={**os.environ,"JZ_DATA_DIR":str(DATA_DIR),"FACULTY_DB":str(DB_PATH),"PYTHONIOENCODING":"utf-8"},
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                encoding="utf-8", errors="replace",
                 bufsize=1,
             )
             for line in proc.stdout:
@@ -681,6 +704,10 @@ def start_script_task(script_key, options):
 
 class FacultyRequestHandler(BaseHTTPRequestHandler):
     def _prepare_request(self):
+        local_bind=self.server.server_address[0] in ('127.0.0.1','::1')
+        host=urllib.parse.urlsplit('//'+self.headers.get('Host','')).hostname
+        if local_bind and host not in ('127.0.0.1','localhost','::1'):
+            self._send_json({'error':'本机服务不接受该主机名。'},HTTPStatus.FORBIDDEN);return False
         password=os.getenv("JZ_PASSWORD","")
         if password:
             supplied=""
@@ -803,7 +830,7 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
                         FROM faculty ORDER BY college, name
                     """).fetchall()
                     buf = io.StringIO()
-                    writer = csv.writer(buf)
+                    writer = xio.safe_csv_writer(buf)
                     writer.writerow(["姓名", "职称", "院系", "邮箱", "电话", "手机", "研究方向", "个人主页"])
                     for r in rows:
                         writer.writerow(list(r))
@@ -900,7 +927,7 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
                         raise ValueError("请先选择要上传的学生课题表格文件（.xlsx 或 .csv）")
                     if "," in b64:
                         b64 = b64.split(",", 1)[1]
-                    file_bytes = base64.b64decode(b64)
+                    file_bytes = base64.b64decode(b64, validate=True)
 
                 res = run_match_pipeline(file_bytes, filename, body.get("params", {}))
                 return self._send_json(res)
@@ -918,14 +945,14 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
                 rec_id = body.get("id") or body.get("teacher_id")
                 if not rec_id:
                     raise ValueError("缺少教师记录 ID")
-                res = update_faculty(rec_id, body)
+                res = update_faculty(rec_id, body, by_teacher_id=not bool(body.get("id")))
                 return self._send_json(res)
 
             if path == "/api/db/delete":
                 rec_id = body.get("id") or body.get("teacher_id")
                 if not rec_id:
                     raise ValueError("缺少教师记录 ID")
-                res = delete_faculty(rec_id)
+                res = delete_faculty(rec_id, by_teacher_id=not bool(body.get("id")))
                 return self._send_json(res)
 
             # 3. 外部教师 Excel/CSV 增量合并接口
@@ -938,7 +965,7 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
                     raise ValueError("请先选择要合并的教师数据表格（.xlsx 或 .csv）")
                 if "," in b64:
                     b64 = b64.split(",", 1)[1]
-                file_bytes = base64.b64decode(b64)
+                file_bytes = base64.b64decode(b64, validate=True)
                 res = merge_teachers_from_bytes(file_bytes, filename, dry_run=dry_run, conflict_policy=conflict_policy)
                 return self._send_json(res)
 
@@ -946,6 +973,7 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
             if path == "/api/scripts/run":
                 script_key = body.get("script_key", "")
                 options = body.get("options", {})
+                if not isinstance(options,dict):raise ValueError("脚本参数必须为对象")
                 task_info = start_script_task(script_key, options)
                 return self._send_json(task_info)
 
