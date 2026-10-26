@@ -2,15 +2,15 @@
 
 本工程使用 GitHub Actions 云端构建，不需要在本机安装 Windows、Docker 或 PyInstaller。发行文件是工作流在 Windows 上实际生成并运行验证的 EXE；配置文件本身不等于已有可下载的发行文件。
 
-## 第一次发布：在网页上操作
+## 在网页上发布新版
 
 1. 确保最新源码已推送到仓库的 main 分支，包括 `.github/workflows/release.yml`。如果推送提示账号或令牌失效，需要先在自己的 Git 客户端恢复登录；不要将令牌写进源码或聊天。
 2. 打开仓库：https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch 。
 3. 点击顶部 Actions，选择左侧 **Test and Release**。若提示尚未启用 Actions，按页面提示为此仓库启用。
 4. 点击 **Run workflow**，分支选择 **main**。
-5. 在版本号输入框填 `v1.0.0`，然后点击运行。版本号留空时只验证和构建，不创建 Release。
+5. 当前已发布v1.0.1；下一版在版本号输入框填尚未使用的 `v1.0.2`，然后点击运行。版本号留空时只验证和构建，不创建 Release。
 6. 等待 test、windows、docker、release 全部显示成功。可以点进具体任务查看日志；release 要等前面的测试和两种构建都通过后才执行。
-7. 回到仓库首页，进入右侧 Releases，打开 `v1.0.0`。Assets 中出现 EXE、ZIP、Docker归档和校验文件，才表示这一版发布完成。
+7. 回到仓库首页，进入右侧 Releases，打开本次填写的版本。Assets 中出现 EXE、ZIP、Docker归档和校验文件，才表示这一版发布完成。
 
 发布使用工作流自身的 `GITHUB_TOKEN`，仅 release 任务授予 `contents: write`，不需要另外创建或保存个人访问令牌。若组织或仓库策略禁止写入，仓库管理员需检查 Actions 的工作流权限。
 
@@ -34,13 +34,13 @@ Windows ZIP同时附带自检结果，便于核对实际构建过程。当前版
 
 ## 以后发布新版
 
-提交并推送修改到main，再按相同步骤填写新的版本号，例如 `v1.0.1`。不要把旧版本号用于另一份源码；工作流会拒绝覆盖指向不同提交的已有版本。历史版本保留，方便用户回退。
+提交并推送修改到main，再按相同步骤填写新的版本号，例如 `v1.0.2`。不要把旧版本号用于另一份源码；工作流会拒绝覆盖指向不同提交的已有版本。历史版本保留，方便用户回退。
 
 熟悉Git后，也可推送对应版本标签触发同一流程：
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+git tag v1.0.2
+git push origin v1.0.2
 ```
 
 ## 构建失败时

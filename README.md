@@ -6,6 +6,8 @@ TaroDeluxe · Codex & SJTU ZhuXueBu & CTP
 
 ## 使用
 
+已发布 [v1.0.1](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases/tag/v1.0.1)：[直接下载 Windows EXE](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases/download/v1.0.1/JunZhengMatch.exe)，或在发行页下载包含说明与自检结果的Windows ZIP。
+
 Windows 发行文件由 GitHub Actions 构建并验证。发布后，在 [Releases](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases) 下载 `JunZhengMatch.exe` 或 Windows ZIP 包，双击 EXE 后在浏览器中操作，无需安装 Python。若暂时没有发行附件，可以先运行源码：
 
 ```bash
