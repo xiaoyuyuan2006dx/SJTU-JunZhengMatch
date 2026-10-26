@@ -6,7 +6,7 @@ TaroDeluxe · Codex & SJTU ZhuXueBu & CTP
 
 ## 使用
 
-已发布 [v1.0.1](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases/tag/v1.0.1)：[直接下载 Windows EXE](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases/download/v1.0.1/JunZhengMatch.exe)，或在发行页下载包含说明与自检结果的Windows ZIP。
+Windows最新版见 [Releases](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases/latest)：[直接下载 Windows EXE](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases/latest/download/JunZhengMatch.exe)，也可在发行页下载含说明与自检结果的Windows ZIP。
 
 Windows 发行文件由 GitHub Actions 构建并验证。发布后，在 [Releases](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases) 下载 `JunZhengMatch.exe` 或 Windows ZIP 包，双击 EXE 后在浏览器中操作，无需安装 Python。若暂时没有发行附件，可以先运行源码：
 
@@ -97,3 +97,5 @@ python tools/verify_app.py --report http-self-test.json
 保留暖米白与浅杏风格，加入金色星结、奶油金按钮，以及用户选定的琴音小人图片。图片原样随前端打包，不需要联网加载；来源说明见 [ASSETS.md](ASSETS.md)。
 
 装饰位于页面侧边背景，使用淡化和正片叠底，不接受鼠标点击。窗口宽度不足1480px时隐藏，避免遮挡表格。右下角水印为 `TaroDeluxe · Codex & SJTU ZhuXueBu & CTP`。
+
+Windows EXE内置用户选定的圆形琴音图标，多尺寸资源覆盖16—256像素，无需外置ICO文件。原图与构建说明见ASSETS.md。

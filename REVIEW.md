@@ -38,3 +38,7 @@ GitHub授权恢复后，源码已提交。首次Windows构建通过内部自检�
 - PyInstaller无控制台模式：https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html
 - GitHub CLI发布命令：https://cli.github.com/manual/gh_release_create
 - 本工程发布步骤：RELEASING.md
+
+## v1.0.2内置图标验证
+
+构建提交a53bf49109f26938c22308849c765e1d0c77b535，Windows构建的7份RT_ICON图像负载与用户所选ICO逐一匹配；内部自检、真实EXE服务匹配与导出及Docker检查全部通过。验证工作流：https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/actions/runs/40305345808 。
