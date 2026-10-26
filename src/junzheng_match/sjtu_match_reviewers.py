@@ -25,10 +25,11 @@ except ImportError:
     pd = None
     HAS_PANDAS = False
 
-import sjtu_excel_io as xio
+from . import sjtu_excel_io as xio
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DB_PATH = SCRIPT_DIR / "sjtu_faculty_data" / "sjtu_faculty_data.db"
+from . import preferences, paths
+DB_PATH = preferences.PreferenceStore().data_dir() / "sjtu_faculty_data.db"
 
 # 先移除完整的非正高职称，再检查剩余职称，避免“副教授、研究员”漏排。
 JUNIOR_RE = re.compile(
@@ -87,6 +88,9 @@ def tokenize(text):
 
 def load_teachers():
     """以只读方式打开数据库，防止路径错误时创建空库。"""
+    if not DB_PATH.exists():
+        import shutil
+        preferences.prepare_folder(DB_PATH.parent);shutil.copy2(paths.SEED_DB,DB_PATH)
     with closing(sqlite3.connect(DB_PATH.resolve().as_uri() + "?mode=ro", uri=True)) as conn:
         rows = conn.execute("""
             SELECT teacher_id, name, title, COALESCE(NULLIF(department,''), college),
@@ -129,7 +133,7 @@ def advisor_names(value):
 
 def find_matches(query_text, teachers, engine, advisor_name, used_names,
                  pool_size=20, pick_count=3, min_score=0.05, relative_score=0.4,
-                 strategy="top", rng=None, allow_unknown_title=False):
+                 strategy="top", rng=None, allow_unknown_title=False, usage_counts=None, max_teacher_uses=2):
     """先确定有相关性的全局候选池，再优先新人；不足时允许复用，不用零分补位。"""
     if pick_count < 1 or pool_size < pick_count:
         raise ValueError("必须满足 pool_size >= pick_count >= 1")
@@ -139,11 +143,13 @@ def find_matches(query_text, teachers, engine, advisor_name, used_names,
     excluded = advisor_names(advisor_name)
     # 同名记录中如有明确正高，保守回避全部同名记录。
     excluded.update(normalize_name(t['name']) for t in teachers if t['is_senior'])
+    usage_counts=usage_counts or {}
+    if not isinstance(max_teacher_uses,int) or max_teacher_uses<1:raise ValueError('教师分配次数上限须为正整数')
     used = {normalize_name(n) for n in used_names}
     ranked = []
     for teacher, (research, profile) in zip(teachers, engine['vectors']):
         name = normalize_name(teacher['name'])
-        if not name or name in excluded or teacher['is_senior']:
+        if not name or name in excluded or teacher['is_senior'] or usage_counts.get(name,0)>=max_teacher_uses:
             continue
         if not allow_unknown_title and not JUNIOR_RE.search(teacher['title']):
             continue
@@ -237,7 +243,7 @@ def normalized_department(text):
 
 def find_complete_matches(student, teachers, engine, usage_counts=None, pool_size=20,
                           pick_count=3, strategy="top", rng=None, allow_unknown_title=False,
-                          min_score=0.05):
+                          min_score=0.05, max_teacher_uses=2):
     """完整分配：课题文字+领域扩展+导师方向+院系补充，硬约束始终保留。
 
     按相关性排序，使用次数仅在近分候选间轻微调整；不同学生可复用教师。
@@ -245,6 +251,7 @@ def find_complete_matches(student, teachers, engine, usage_counts=None, pool_siz
     """
     if pick_count < 1 or pool_size < pick_count:
         raise ValueError("必须满足 pool_size >= pick_count >= 1")
+    if not isinstance(max_teacher_uses,int) or max_teacher_uses<1:raise ValueError("教师分配次数上限须为正整数")
     usage_counts = usage_counts or {}
     excluded = advisor_names(student.get('advisor', ''))
     excluded.update(normalize_name(t['name']) for t in teachers if t['is_senior'])
@@ -257,7 +264,7 @@ def find_complete_matches(student, teachers, engine, usage_counts=None, pool_siz
     ranked = []
     for teacher, (research, profile) in zip(teachers, engine['vectors']):
         name = normalize_name(teacher['name'])
-        if not name or name in excluded or teacher['is_senior']:
+        if not name or name in excluded or teacher['is_senior'] or usage_counts.get(name,0)>=max_teacher_uses:
             continue
         if not allow_unknown_title and not JUNIOR_RE.search(teacher['title']):
             continue
@@ -475,6 +482,7 @@ def parse_args():
     group.add_argument("--name")
     parser.add_argument("--pool", type=int, default=20)
     parser.add_argument("--pick", type=int, default=3)
+    parser.add_argument("--max-teacher-uses",type=int,default=2,help="每位教师在本次任务最多分配给几名学生（默认2）")
     parser.add_argument("--min-score", type=float, default=0.05)
     parser.add_argument("--relative-score", type=float, default=0.4)
     parser.add_argument("--strategy", choices=["top", "weighted"], default="top")
@@ -484,13 +492,14 @@ def parse_args():
     parser.add_argument("--strict", action="store_true", help="仅返回过阈值候选，不补齐；默认自动补齐")
     parser.add_argument("--dry-run", action="store_true")
     ns = parser.parse_args()
+    if ns.max_teacher_uses<1:parser.error("--max-teacher-uses须为正整数")
     if ns.pick < 1 or ns.pool < ns.pick:
         parser.error("必须满足 --pool >= --pick >= 1")
     if not 0 <= ns.min_score <= 1 or not 0 <= ns.relative_score <= 1:
         parser.error("相关性阈值必须在0到1之间")
     args = dict(file=ns.file, mode="all", start=None, end=None,
                 student_seq=ns.student, student_name=ns.name, dry_run=ns.dry_run,
-                pool_size=ns.pool, pick_count=ns.pick, min_score=ns.min_score,
+                pool_size=ns.pool, pick_count=ns.pick, max_teacher_uses=ns.max_teacher_uses, min_score=ns.min_score,
                 relative_score=ns.relative_score, strategy=ns.strategy,
                 seed=ns.seed, output=ns.output, allow_unknown_title=ns.allow_unknown_title, strict=ns.strict)
     if ns.student_range:
@@ -577,11 +586,11 @@ def main():
                                            pick_count=pick_count,
                                            min_score=args['min_score'], relative_score=args['relative_score'],
                                            strategy=args['strategy'], rng=rng,
-                                           allow_unknown_title=args['allow_unknown_title'])
+                                           allow_unknown_title=args['allow_unknown_title'],usage_counts=usage_counts,max_teacher_uses=args['max_teacher_uses'])
         else:
             matches, reused = find_complete_matches(s, teachers, engine, usage_counts,
                 pool_size=pool_size, pick_count=pick_count, strategy=args['strategy'], rng=rng,
-                allow_unknown_title=args['allow_unknown_title'], min_score=args['min_score'])
+                allow_unknown_title=args['allow_unknown_title'], min_score=args['min_score'],max_teacher_uses=args['max_teacher_uses'])
         results.append(matches)
 
         # 标记已用

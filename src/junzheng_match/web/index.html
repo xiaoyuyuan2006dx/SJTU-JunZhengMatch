@@ -24,9 +24,11 @@
           <span>数据库维护</span>
           <span class="db-pill" id="top-db-count">...</span>
         </button>
+        <button class="nav-btn" id="nav-preferences" onclick="switchPage('preferences')">偏好设置</button>
       </nav>
 
       <div class="nav-doc-links">
+        <button class="doc-link-btn" id="btn-exit-app" onclick="exitApplication()">退出程序</button>
         <button class="doc-link-btn" onclick="openDocModal('README')">README</button>
         <button class="doc-link-btn" onclick="openDocModal('ARCHITECTURE')">ARCHITECTURE</button>
         <a class="doc-link-btn" href="https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch" target="_blank" rel="noopener noreferrer" title="访问 xiaoyuyuan2006dx 的 GitHub">
@@ -103,6 +105,11 @@
               <input type="number" class="input" id="param-pick" value="3" min="1" max="15" onchange="updateParamsSummaryLabel()" />
             </div>
 
+            <div class="form-group">
+              <label class="form-label" for="param-max-uses">每位教师最多分配学生数</label>
+              <input type="number" class="input" id="param-max-uses" value="2" min="1" max="10000" onchange="updateParamsSummaryLabel()" />
+              <small class="pref-muted">默认2，按本次任务全部选中学生计数；达到上限后不再选用，候选不足留空。</small>
+            </div>
             <div class="form-group">
               <label class="form-label">候选池大小 (--pool)</label>
               <input type="number" class="input" id="param-pool" value="20" min="1" max="200" onchange="updateParamsSummaryLabel()" />
@@ -417,6 +424,25 @@
         </div>
       </div>
     </section>
+    <section id="page-preferences" class="page-view">
+      <div class="card"><div class="card-title">偏好设置 <span class="pref-subtitle">Preferences</span></div>
+        <p class="pref-muted">浏览器与独立窗口共用后台、教师库及这些设置。关闭界面不会停止服务。</p>
+        <h3>文件与存储</h3>
+        <label class="form-label" for="pref-data-dir">数据存储位置</label>
+        <div class="pref-path-row"><input class="input" id="pref-data-dir" type="text" /><button class="btn" id="pref-pick-dir" onclick="choosePreferenceDirectory()">选择文件夹</button><button class="btn" onclick="openStorageFolder('data')">打开文件夹</button></div>
+        <p class="pref-muted" id="pref-default-path"></p>
+        <label class="form-label" for="pref-migration">更换目录时</label>
+        <select class="select" id="pref-migration"><option value="copy">迁移现有数据（保留原位置副本）</option><option value="existing">使用目标位置已有的教师库</option></select>
+        <label class="checkbox-label" style="display:flex;gap:8px;margin:14px 0"><input type="checkbox" id="pref-retain-uploads" />保存上传原表（包含学生信息，默认关闭）</label>
+        <p class="pref-muted">数据库、备份和已导出文件放在数据目录。下载导出时也会在 exports 文件夹保留一份。</p>
+        <div class="pref-actions"><button class="btn" onclick="downloadAppFile('/api/preferences/backup','JunZhenMatch-backup.db')">下载数据库备份</button><button class="btn" onclick="openStorageFolder('backups')">打开备份文件夹</button><button class="btn" onclick="document.getElementById('pref-restore-file').click()">从备份恢复</button><input hidden type="file" id="pref-restore-file" accept=".db,.sqlite" onchange="restoreDatabase(event)" /><button class="btn" onclick="openStorageFolder('exports')">打开导出文件夹</button></div>
+        <h3 style="margin-top:24px">默认匹配参数</h3>
+        <p class="pref-muted">这里保存以后打开页面时的默认值；单次任务仍可在匹配页面调整。</p>
+        <div class="params-grid" id="pref-match-defaults"></div>
+        <div class="pref-actions" style="margin-top:20px"><button class="btn btn-primary" id="pref-save" onclick="savePreferences()">保存偏好设置</button><span role="status" id="pref-feedback"></span></div>
+      </div>
+    </section>
+
   </main>
 
   <!-- 右下角轻量版本与版权信息 -->
@@ -528,6 +554,10 @@
     </div>
   </div>
 
+  <div class="modal-backdrop" id="first-storage-modal"><div class="modal-dialog" style="height:auto;max-width:590px;padding:24px">
+    <h2>首次使用：确认数据位置</h2><p>公开教师库、备份和导出文件会保存在下方位置，更新程序不会覆盖它们。</p>
+    <p class="pref-initial-path" id="first-storage-path"></p><div class="pref-actions"><button class="btn btn-primary" onclick="confirmInitialStorage()">使用此位置</button><button class="btn" onclick="configureInitialStorage()">选择其他位置</button></div><p role="status" id="first-storage-error"></p>
+  </div></div>
   <script src="/app.js"></script>
 <img class="kotone-background" src="/frontend/kotone-mascot.png" alt="" aria-hidden="true" />
 </body>

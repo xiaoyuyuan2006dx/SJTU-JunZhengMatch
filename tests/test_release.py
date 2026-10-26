@@ -1,3 +1,6 @@
+import sys
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parent.parent/"src"))
 import base64
 from contextlib import closing
 import csv
@@ -15,11 +18,10 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-_temporary=tempfile.TemporaryDirectory()
-os.environ['JZ_DATA_DIR']=_temporary.name
-import sjtu_excel_io as xio
-import sjtu_match_reviewers as matcher
-import web_server as web
+from bootstrap import TEMPORARY as _temporary
+from junzheng_match import sjtu_excel_io as xio
+from junzheng_match import sjtu_match_reviewers as matcher
+from junzheng_match import web_server as web
 
 
 class WorkbookTests(unittest.TestCase):
@@ -145,8 +147,8 @@ class APITests(unittest.TestCase):
     def test_nonlocal_binding_requires_password(self):
         with self.assertRaises(ValueError):web.run_server('0.0.0.0',0)
     def test_legacy_script_parameters_still_available(self):
-        self.assertTrue((web.SCRIPT_DIR/'sjtu_faculty_scraper.py').exists())
-        text=(web.SCRIPT_DIR/'frontend/index.html').read_text()
+        self.assertTrue((Path(web.__file__).parent/'crawlers/sjtu_faculty_scraper.py').exists())
+        text=(web.FRONTEND_DIR/'index.html').read_text()
         for key in ('param-pool','param-seed','param-strict','param-allow-unknown'):
             self.assertIn(key,text)
 
@@ -206,7 +208,7 @@ class ReviewRegressionTests(unittest.TestCase):
 class StartupEncodingTests(unittest.TestCase):
     def test_redirected_ascii_output_is_reconfigured(self):
         import subprocess,sys
-        command=[sys.executable,'-c',"import entrypoint; entrypoint.initialize_streams(); print(chr(0x1f680))"]
+        command=[sys.executable,'-c',"import sys; sys.path.insert(0,'src'); from junzheng_match import entrypoint; entrypoint.initialize_streams(); print(chr(0x1f680))"]
         result=subprocess.run(command,cwd=web.SCRIPT_DIR,env={**os.environ,'PYTHONIOENCODING':'ascii'},capture_output=True,timeout=20)
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertIn(chr(0x1f680).encode('utf-8'),result.stdout)

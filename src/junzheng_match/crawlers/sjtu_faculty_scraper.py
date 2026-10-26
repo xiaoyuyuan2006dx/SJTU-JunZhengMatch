@@ -27,8 +27,9 @@ BASE_URL = "https://faculty.sjtu.edu.cn"
 JSON_ENDPOINT = f"{BASE_URL}/system/resource/tsites/advancesearch.jsp"
 LISTING_URL = f"{BASE_URL}/xyjs_list.jsp"
 # 数据保存到脚本所在目录下的 sjtu_faculty_data 文件夹
+from ..preferences import PreferenceStore
 SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_DIR = Path(os.getenv("JZ_DATA_DIR", SCRIPT_DIR / "sjtu_faculty_data"))
+DATA_DIR = PreferenceStore().data_dir()
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 PROFILE_DIR = DATA_DIR / "profiles"
 DB_PATH = Path(os.getenv("FACULTY_DB", DATA_DIR / "sjtu_faculty_data.db"))

@@ -1,18 +1,17 @@
 # Windows 使用说明
 
-1. 在已发布版本的Release附件中下载 `JunZhengMatch.exe`，或下载并解压 `SJTU-JunZhengMatch-Windows-x64.zip`。GitHub自动生成的Source code压缩包仅包含源码。
-2. 双击运行，浏览器自动打开 `http://127.0.0.1:8765`。
-3. 下载空白模板填写，或使用虚构示例试跑。上传后点击匹配预览，再选择 CSV 或 Excel 导出。
-4. 若端口冲突，可创建快捷方式，在目标末尾加 `--port 8080`。
+1. 从 [Release](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases/latest) 下载 portable.zip 或 setup.msi。
+2. 便携版解压后双击 EXE，浏览器首次提示数据目录；安装版在安装界面选择数据目录，从快捷方式打开独立窗口。
+3. 上传填写好的模板，匹配预览，导出 CSV 或合并单元格 XLSX。无需安装 Python。
 
-不需要安装Python。程序未使用商业代码签名；请只从本仓库Release获取，并可核对同页SHA256值。
+默认数据目录是 `%USERPROFILE%\JunZhenMatch`，程序自带737条网络公开教师记录。后续修改保存在外部目录，不会打进 EXE。安装版可能联网安装微软 WebView2 环境。
 
-数据保存在 `%LOCALAPPDATA%\SJTU-JunZhengMatch`，不在EXE的临时解包目录。发布自带现有公开教师库，下载即可使用；后续可在数据库页编辑、增量导入或运行爬取更新。更换EXE不会主动删除既有数据。
+两版使用相同目录时共用后台及教师库。关闭标签页或窗口只关闭界面；右上角“退出程序”停止共享服务，多界面在线时会提示确认，任务运行期间不可退出。退出后再次打开快捷方式或 EXE 即可启动。
 
-程序在浏览器关闭后仍运行。需要停止时，可在任务管理器中结束 `JunZhengMatch.exe`；再次双击会复用已运行的本机服务。导出的学生文件请由使用者自行管理。
+“偏好设置”可选择路径、迁移数据、使用已有教师库、备份恢复、打开导出目录及保存匹配默认参数。移动数据前等待任务完成；迁移保留原文件。默认不保留上传原表，导出文件保存在 `exports`。卸载安装版保留数据目录，需删除时请自行备份后处理。
 
-公开服务并非默认行为。需要局域网部署时，由管理员配置至少12字符访问密码及相应网络限制。参数说明见README。
+旧版数据目录通常为 `%LOCALAPPDATA%\SJTU-JunZhengMatch`；可以在偏好设置选择“使用目标已有库”，或将其中 `sjtu_faculty_data.db` 作为备份恢复到新目录。
 
-维护者如何发布新版，请阅读 [RELEASING.md](RELEASING.md)。
+端口冲突会自动使用可用端口。需指定端口可在快捷方式目标后添加 `--port 8080`。独立窗口版快捷方式带 `--desktop`；便携 EXE 默认打开浏览器。
 
-EXE内置用户选定的琴音圆形图标，无需另外放置图标文件。若Windows沿用旧图标缓存，可将新版下载到新文件夹或换一个文件名后查看。
+程序未作商业代码签名。可用 PowerShell `Get-FileHash 文件名 -Algorithm SHA256` 与 Release 中 SHA256SUMS.txt 核对。发布步骤见 [RELEASING.md](RELEASING.md)。

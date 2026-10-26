@@ -1070,3 +1070,12 @@ html, body {
  #match-preview-wrap .topic-wrap-cell{grid-column:1/-1;}
  #match-preview-wrap .badge{max-width:100%;}
 }
+
+.pref-subtitle,.pref-muted{color:var(--ink-muted);font-size:12px;line-height:1.65;}
+.pref-path-row,.pref-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap;}
+.pref-path-row input{flex:1;min-width:220px;}
+#page-preferences h3{font-size:15px;margin:18px 0 10px;}
+#page-preferences .card{max-width:1050px;margin:auto;}
+#pref-match-defaults label{display:block;margin-bottom:7px;}
+.pref-initial-path{padding:14px;border:1px solid var(--border-light);background:var(--bg-warm-tint);border-radius:8px;word-break:break-all;font-family:var(--font-mono);font-size:12px;}
+#pref-feedback{font-size:12px;color:var(--orange-deep-text);}

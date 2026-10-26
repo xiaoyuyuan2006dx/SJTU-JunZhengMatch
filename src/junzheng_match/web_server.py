@@ -30,26 +30,25 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import sjtu_excel_io as xio
-import sjtu_match_reviewers as matcher
-import sjtu_query_db as qdb
+from . import sjtu_excel_io as xio
+from . import sjtu_match_reviewers as matcher
+from . import sjtu_query_db as qdb
 
-SCRIPT_DIR = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
-if os.getenv("JZ_DATA_DIR"):
-    DATA_DIR = Path(os.environ["JZ_DATA_DIR"]).resolve()
-elif (SCRIPT_DIR / "sjtu_faculty_data" / "sjtu_faculty_data.db").exists():
-    DATA_DIR = SCRIPT_DIR / "sjtu_faculty_data"  # 保留本机原工程的真实数据库。
-else:
-    base = Path(os.getenv("LOCALAPPDATA", Path.home() / "Library/Application Support" if sys.platform == "darwin" else os.getenv("XDG_DATA_HOME", Path.home() / ".local/share")))
-    DATA_DIR = base / "SJTU-JunZhengMatch"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = DATA_DIR / "sjtu_faculty_data.db"
-if not DB_PATH.exists():
-    seed = SCRIPT_DIR / "data" / "faculty.db"
-    if not seed.exists(): raise RuntimeError("未找到公开教师数据库。请保持发布包完整，或设置 JZ_DATA_DIR。")
-    shutil.copy2(seed, DB_PATH)
-matcher.DB_PATH = qdb.DB_PATH = DB_PATH
-FRONTEND_DIR = SCRIPT_DIR / "frontend"
+from . import paths, preferences, runtime
+SCRIPT_DIR=paths.RESOURCE_ROOT
+PREFERENCES=preferences.PreferenceStore()
+DATA_DIR=preferences.prepare_folder(PREFERENCES.data_dir())
+DB_PATH=DATA_DIR/'sjtu_faculty_data.db'
+if not DB_PATH.exists():shutil.copy2(paths.SEED_DB,DB_PATH)
+matcher.DB_PATH=qdb.DB_PATH=DB_PATH
+FRONTEND_DIR=paths.WEB_ROOT
+INSTANCE_ID=secrets.token_hex(16)
+CLIENTS={}
+ACTIVE_OPERATIONS=0
+ACTIVITY_LOCK=threading.RLock()
+INSTANCE_LOCK=None
+SERVER_INSTANCE=None
+EXIT_TOKEN=secrets.token_hex(32)
 
 _REQUEST_STATE=threading.local()
 MATCH_SESSIONS={}
@@ -82,6 +81,18 @@ COLUMN_MAP = {
 }
 EXCLUDE_COLS = ["导师", "学生", "指导", "课题", "序号"]
 DB_FIELDS = ["title", "department", "college", "email", "phone", "mobile", "research_direction", "profile_url", "profile_text"]
+
+
+def matching_operation(function):
+    @wraps(function)
+    def active(*args,**kwargs):
+        global ACTIVE_OPERATIONS
+        with ACTIVITY_LOCK:ACTIVE_OPERATIONS+=1
+        try:
+            with DB_WRITE_LOCK:return function(*args,**kwargs)
+        finally:
+            with ACTIVITY_LOCK:ACTIVE_OPERATIONS-=1
+    return active
 
 
 def database_mutation(function):
@@ -328,11 +339,15 @@ def delete_faculty(record_id, by_teacher_id=False):
         conn.close()
 
 
+@matching_operation
 def run_match_pipeline(file_bytes, filename, params):
     """
     执行盲审导师匹配流水线，支持全部 CLI 参数
     """
     if not isinstance(params,dict):raise ValueError("匹配参数必须为对象")
+    params={**PREFERENCES.read()["match_defaults"],**params}
+    validated=preferences.validate_match({k:v for k,v in params.items() if k in preferences.DEFAULT_MATCH})
+    params.update(validated)
     rows = xio.read_tabular_rows(file_bytes, filename)
     all_students, headers, banner_text = xio.parse_students_from_rows(rows)
     for s in all_students:
@@ -365,6 +380,7 @@ def run_match_pipeline(file_bytes, filename, params):
     seed = int(params.get("seed", 42))
     min_score = float(params.get("min_score", 0.05))
     relative_score = float(params.get("relative_score", 0.4))
+    max_teacher_uses=params["max_teacher_uses"]
     strict = bool(params.get("strict", False))
     allow_unknown_title = bool(params.get("allow_unknown_title", False))
 
@@ -391,14 +407,14 @@ def run_match_pipeline(file_bytes, filename, params):
                 s["topic"], teachers, engine, s["advisor"], used_names,
                 pool_size=pool_size, pick_count=pick_count,
                 min_score=min_score, relative_score=relative_score,
-                strategy=strategy, rng=rng, allow_unknown_title=allow_unknown_title,
+                strategy=strategy, rng=rng, allow_unknown_title=allow_unknown_title,usage_counts=usage_counts,max_teacher_uses=max_teacher_uses,
             )
         else:
             matches, reused = matcher.find_complete_matches(
                 s, teachers, engine, usage_counts,
                 pool_size=pool_size, pick_count=pick_count,
                 strategy=strategy, rng=rng, allow_unknown_title=allow_unknown_title,
-                min_score=min_score,
+                min_score=min_score,max_teacher_uses=max_teacher_uses,
             )
 
         results.append(matches)
@@ -437,8 +453,12 @@ def run_match_pipeline(file_bytes, filename, params):
             "advisor_dept": full_adv_dept,
             "short_advisor_dept": qdb.short_college(full_adv_dept),
             "reviewers": reviewer_list,
+            "unfilled_reason": "" if len(matches)>=pick_count else "满足导师回避、职称、方向及教师分配次数上限的候选不足，剩余位置留空。",
         })
 
+    if PREFERENCES.read().get("retain_uploads"):
+        suffix=".csv" if str(filename).lower().endswith(".csv") else ".xlsx"
+        (DATA_DIR/"uploads"/(str(time.time_ns())+suffix)).write_bytes(file_bytes)
     elapsed = round(time.time() - t0, 3)
 
     base_stem = Path(filename or "matched").stem
@@ -462,6 +482,7 @@ def run_match_pipeline(file_bytes, filename, params):
         "unique_reviewers_used": len(used_names),
         "pick_count": pick_count,
         "pool_size": pool_size,
+        "max_teacher_uses": max_teacher_uses,
         "strategy": strategy,
         "strict": strict,
         "elapsed_sec": elapsed,
@@ -642,7 +663,7 @@ def start_script_task(script_key, options):
     if any(t.get("status")=="running" for t in TASKS.values()):
         raise ValueError("已有维护脚本正在运行，请完成后再启动。")
     database_backup()
-    cmd = [sys.executable, "--internal-script", script_name] if getattr(sys,"frozen",False) else [sys.executable,"-u",str(SCRIPT_DIR/script_name)]
+    cmd = [sys.executable, "--internal-script", script_name] if getattr(sys,"frozen",False) else [sys.executable,"-u","-m","junzheng_match.crawlers."+Path(script_name).stem]
     if script_key == "scraper":
         if options.get("force"):
             cmd.append("--force")
@@ -672,7 +693,7 @@ def start_script_task(script_key, options):
             proc = subprocess.Popen(
                 cmd,
                 cwd=str(DATA_DIR),
-                env={**os.environ,"JZ_DATA_DIR":str(DATA_DIR),"FACULTY_DB":str(DB_PATH),"PYTHONIOENCODING":"utf-8"},
+                env={**os.environ,"JZ_DATA_DIR":str(DATA_DIR),"FACULTY_DB":str(DB_PATH),"PYTHONIOENCODING":"utf-8","PYTHONPATH":str(SCRIPT_DIR/"src")},
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
@@ -777,13 +798,22 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
         return result
 
     def do_GET(self):
-        if self.path=="/health":return self._send_json({"status":"ok","service":"SJTU-JunZhengMatch"})
+        if self.path=="/health":return self._send_json({"status":"ok","service":"SJTU-JunZhengMatch","instance_id":INSTANCE_ID,"data_identity":paths.data_identity(DATA_DIR)})
         if not self._prepare_request():return
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         qs = urllib.parse.parse_qs(parsed.query)
 
         try:
+            from .service_settings import ServiceSettings
+            manager=ServiceSettings(sys.modules[__name__])
+            if path=="/api/preferences":return self._send_json(manager.get())
+            if path=="/api/app/status":return self._send_json(manager.status(self.server.server_address[0] in ('127.0.0.1','::1')))
+            if path=="/api/preferences/backup":
+                with DB_WRITE_LOCK:
+                    database_backup()
+                    backup=max((DATA_DIR/'backups').glob('*.db'),key=lambda p:p.stat().st_mtime_ns)
+                    return self._send_bytes(backup.read_bytes(),'application/octet-stream','JunZhenMatch-backup.db')
             # 1. 静态页面文件
             if path in ("/", "/index.html"):
                 content = (FRONTEND_DIR / "index.html").read_bytes()
@@ -880,6 +910,7 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
                     csv_bytes = xio.generate_horizontal_csv(
                         students, results, pick_count=pick_count, tokenize_fn=matcher.tokenize
                     )
+                    (DATA_DIR/"exports"/(str(time.time_ns())+".csv")).write_bytes(csv_bytes)
                     return self._send_bytes(
                         csv_bytes,
                         "text/csv; charset=utf-8",
@@ -890,6 +921,7 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
                         students, results, pick_count=pick_count, banner_text=banner_text,
                         include_match_meta=False, tokenize_fn=matcher.tokenize,
                     )
+                    (DATA_DIR/"exports"/(str(time.time_ns())+".xlsx")).write_bytes(xlsx_bytes)
                     return self._send_bytes(
                         xlsx_bytes,
                         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -913,6 +945,33 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
 
         try:
             body = self._read_json_body()
+            from .service_settings import ServiceSettings
+            manager=ServiceSettings(sys.modules[__name__])
+            if path=="/api/app/client":
+                key=str(body.get('id',''))
+                if not re.fullmatch(r'[a-zA-Z0-9_-]{8,80}',key):raise ValueError('无效界面标识。')
+                with ACTIVITY_LOCK:
+                    if body.get('closed'):CLIENTS.pop(key,None)
+                    else:
+                        if len(CLIENTS)>=200 and key not in CLIENTS:manager.clients()
+                        if len(CLIENTS)>=200 and key not in CLIENTS:raise ValueError('连接界面过多。')
+                        CLIENTS[key]=dict(id=key,mode='desktop' if body.get('mode')=='desktop' else 'browser',seen=time.time())
+                return self._send_json({'status':'ok'})
+            if path=="/api/preferences":return self._send_json(manager.save(body))
+            if path=="/api/preferences/restore":
+                return self._send_json(manager.restore(base64.b64decode(body.get('file_base64',''),validate=True)))
+            if path in ("/api/preferences/open-folder","/api/preferences/choose-folder","/api/app/shutdown"):
+                if self.server.server_address[0] not in ('127.0.0.1','::1') or os.getenv('JZ_MANAGED_DATA'):raise ValueError('此操作仅供本机版本使用。')
+                if path=="/api/preferences/open-folder":return self._send_json(manager.open_folder(body.get('kind','data')))
+                if path=="/api/preferences/choose-folder":
+                    from .native import pick_directory
+                    return self._send_json({'path':pick_directory()})
+                if not hmac.compare_digest(str(body.get('token','')),EXIT_TOKEN):raise ValueError('退出凭据已失效，请刷新页面。')
+                if manager.busy():raise ValueError('请等待匹配或爬取任务结束后再退出。')
+                if len(manager.clients())>1 and not body.get('confirm_all'):raise ValueError('还有其他界面在使用，需确认退出共享后台。')
+                self._send_json({'status':'ok'})
+                threading.Thread(target=self.server.shutdown,daemon=True).start();return
+
 
             # 1. 执行盲审匹配预览（支持上传文件 base64 或使用内置 sample.xlsx）
             if path == "/api/match/run":
@@ -982,22 +1041,28 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
             return self._send_json({"error": str(e)}, status=HTTPStatus.BAD_REQUEST)
 
 
-def run_server(host="127.0.0.1", port=8765):
-    if host not in ('127.0.0.1','localhost','::1') and len(os.getenv('JZ_PASSWORD',''))<12:
-        raise ValueError('非本机访问须设置至少12字符的 JZ_PASSWORD。')
-    server = ThreadingHTTPServer((host, port), FacultyRequestHandler)
-    server.daemon_threads=True
-    print(f"🚀 SJTU 䇹政盲审导师匹配与数据库维护平台已启动: http://{host}:{port}")
+def run_server(host="127.0.0.1",port=8765):
+    global INSTANCE_LOCK,SERVER_INSTANCE
+    local=host in ('127.0.0.1','localhost','::1')
+    if not local and len(os.getenv('JZ_PASSWORD',''))<12:raise ValueError('非本机访问须设置至少12字符的JZ_PASSWORD。')
+    INSTANCE_LOCK=runtime.FolderLock(DATA_DIR).acquire()
+    server=None
     try:
+        try:server=ThreadingHTTPServer((host,port),FacultyRequestHandler)
+        except OSError:
+            if not local:raise
+            server=ThreadingHTTPServer((host,0),FacultyRequestHandler)
+        SERVER_INSTANCE=server;server.daemon_threads=True
+        if local:runtime.write_instance(DATA_DIR,server.server_port,INSTANCE_ID)
+        print(f'JunZhenMatch: http://{host}:{server.server_port}',flush=True)
         server.serve_forever()
-    except KeyboardInterrupt:
-        print("\n👋 服务已停止")
-        server.server_close()
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="SJTU 䇹政盲审导师匹配与数据库管理 Web 服务")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
-    args = parser.parse_args()
-    run_server(args.host, args.port)
+    except KeyboardInterrupt:pass
+    finally:
+        if server:server.server_close()
+        registry=runtime.registry_path(DATA_DIR)
+        if registry.exists():
+            try:
+                if json.loads(registry.read_text()).get('instance_id')==INSTANCE_ID:registry.unlink()
+            except (OSError,ValueError):pass
+        if INSTANCE_LOCK:INSTANCE_LOCK.release()
+        SERVER_INSTANCE=None

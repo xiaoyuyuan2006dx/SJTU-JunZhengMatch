@@ -2,7 +2,7 @@
  * SJTU 䇹政盲审导师匹配与数据库维护平台 — 前端交互逻辑 (app.js)
  * 特性：
  * 1. 匹配预览与数据库表均采用固定列宽、固定单元格高度、无任何内部滚动条
- * 2. 匹配预览中的「同学课题」支持 2–3 行自然换行完整显示；「学生学号」完整显示
+ * 2. 匹配预览中的「同学课题」支持 2–3 行自然换行完整显示；「学生学号」以前三位加省略号显示
  * 3. 匹配预览中导师与评审学院显示简称（如电院、数院、高金），数据库与导出保留去掉“上海交通大学”前缀后的完整院系名
  * 4. 数据库院系概览按拼音A–Z排列；新增/编辑教师弹窗提供已有院系下拉选项，若输入未出现过的新院系则实时警告并二次确认
  */
@@ -52,6 +52,7 @@ function fittedWidth(header, values, {mono=false,bold=false,extra=0}={}) {
   return Math.ceil(max)+18; // 左右8px内边距+边框；不使用百分比压缩短字段。
 }
 function fittedColumns(specs, availableWidth, compact=false) {
+  availableWidth=Math.max(0,availableWidth-2); // 容器边框，不占用短字段宽度。
   const widths=specs.map(s=>s.width||s.min||120);
   const base=widths.reduce((a,b)=>a+b,0);
   const weights=specs.reduce((n,s)=>n+(s.width?0:(s.weight||1)),0);
@@ -101,8 +102,11 @@ function switchPage(pageKey) {
   document.querySelectorAll(".page-view").forEach((el) => el.classList.remove("active"));
   document.getElementById("nav-match").classList.remove("active");
   document.getElementById("nav-db").classList.remove("active");
+  document.getElementById("nav-preferences").classList.remove("active");
 
-  if (pageKey === "db") {
+  if(pageKey === "preferences"){
+    document.getElementById("page-preferences").classList.add("active");document.getElementById("nav-preferences").classList.add("active");loadPreferences();
+  } else if (pageKey === "db") {
     document.getElementById("page-db").classList.add("active");
     document.getElementById("nav-db").classList.add("active");
     loadDbStats();
@@ -153,7 +157,7 @@ function updateParamsSummaryLabel() {
 
   const arrow = isOpen ? "▴" : "▾";
   document.getElementById("params-summary-label").textContent =
-    `⚙️ 匹配参数设置（${filterDesc} · 每人 ${pick} 位 · 候选池 ${pool} · ${strategy} · ${strict}）${arrow}`;
+    `⚙️ 匹配参数设置（${filterDesc} · 每人 ${pick} 位 · 每位导师最多 ${document.getElementById("param-max-uses").value||2} 次 · 候选池 ${pool} · ${strategy} · ${strict}）${arrow}`;
 }
 
 function escapeHtml(str) {
@@ -401,6 +405,7 @@ window.addEventListener("DOMContentLoaded", () => {
     });
   }
   loadDbStats();
+  initializeApplication();
 });
 
 function collectMatchParams() {
@@ -409,6 +414,7 @@ function collectMatchParams() {
   const params = {
     filter_mode: mode,
     pool_size: parseInt(document.getElementById("param-pool").value || "20", 10),
+    max_teacher_uses: Number(document.getElementById("param-max-uses").value),
     pick_count: parseInt(document.getElementById("param-pick").value || "3", 10),
     strategy: document.getElementById("param-strategy").value,
     seed: parseInt(document.getElementById("param-seed").value || "42", 10),
@@ -476,7 +482,7 @@ function updateMatchStatsUI(data) {
   document.getElementById("stat-full-count").textContent = `${data.matched_full}/${data.total_matched_students}`;
   document.getElementById("stat-rev-count").textContent = data.unique_reviewers_used;
   document.getElementById("stat-elapsed").textContent = `${data.elapsed_sec}s`;
-  document.getElementById("match-summary-text").textContent = `${data.filename}`;
+  document.getElementById("match-summary-text").textContent = `${data.filename} · 每位教师上限 ${data.max_teacher_uses} 次${data.matched_full<data.total_matched_students?" · 候选不足的位置已留空，请调整次数上限或匹配参数":""}`;
 }
 
 function togglePreviewMode() {
@@ -665,7 +671,7 @@ function renderMatchPreviewTable() {
           <td style="text-align:center;" title="推荐相近度: ${rev.similarity.toFixed(4)}"><span class="score-pill">${rev.similarity.toFixed(3)}</span></td>
         `;
       } else {
-        html += `<td colspan="7" style="color:var(--ink-muted);text-align:center;">(无更多候选)</td>`;
+        html += `<td colspan="7" style="color:var(--ink-muted);text-align:center;">(满足约束的候选不足，留空)</td>`;
       }
       html += `</tr>`;
     }
@@ -676,9 +682,7 @@ function renderMatchPreviewTable() {
   labelPreviewCells();
 }
 
-function exportMatchedResult(format) {
-  window.location.href = `/api/match/export?format=${encodeURIComponent(format)}`;
-}
+function exportMatchedResult(format) {downloadAppFile(`/api/match/export?format=${encodeURIComponent(format)}`,`评审匹配结果.${format}`);}
 
 // ==================== 数据库查询、检索与人工维护 ====================
 async function loadDbStats() {
@@ -1068,3 +1072,101 @@ async function refreshScriptTasks() {
 }
 
 function safeProfileUrl(value) { try { const url=new URL(value); return ["http:","https:"].includes(url.protocol)?url.href:"#"; } catch{return "#";} }
+
+// Shared runtime preferences and explicit application exit.
+let appPreferences=null;
+let heartbeatTimer=null;
+const clientId=crypto.randomUUID();
+const desktopInterface=new URLSearchParams(location.search).get('interface')==='desktop';
+const preferenceFields=[
+ ['max_teacher_uses','每位教师最多分配学生数','number',2],['pick_count','每人评审数','number',3],['pool_size','候选池大小','number',20],
+ ['strategy','选取策略','select','top'],['seed','随机种子','number',42],['min_score','最低相近分数','number',.05],['relative_score','相对分数阈值','number',.4],
+ ['strict','严格阈值模式','checkbox',false],['allow_unknown_title','允许职称不明','checkbox',false]
+];
+async function appRequest(path,body){
+ const response=await fetch(path,body===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+ const result=await response.json();if(!response.ok||result.error)throw new Error(result.error||'操作失败');return result;
+}
+function populatePreferences(data){
+ appPreferences=data;document.getElementById('pref-data-dir').value=data.data_dir;
+ document.getElementById('pref-default-path').textContent=`默认位置：${data.default_data_dir}${data.managed_storage?' · 当前由Docker挂载管理':''}`;
+ document.getElementById('pref-retain-uploads').checked=data.retain_uploads;
+ document.getElementById('pref-data-dir').disabled=data.managed_storage;
+ document.getElementById('pref-pick-dir').disabled=data.managed_storage;
+ document.getElementById('pref-match-defaults').innerHTML=preferenceFields.map(([key,label,type,fallback])=>{
+  const value=data.match_defaults[key]??fallback;
+  const field=type==='select'?`<select id="pref-${key}" class="select"><option value="top" ${value==='top'?'selected':''}>排名优先</option><option value="weighted" ${value==='weighted'?'selected':''}>加权抽样</option></select>`:type==='checkbox'?`<input id="pref-${key}" type="checkbox" ${value?'checked':''}/>`:`<input id="pref-${key}" class="input" type="number" step="${['min_score','relative_score'].includes(key)?'.01':'1'}" value="${escapeHtml(value)}"/>`;
+  return `<div class="form-group"><label for="pref-${key}" class="form-label">${label}</label>${field}</div>`;
+ }).join('');
+}
+function applyDefaults(data){
+ const map={pick_count:'pick',pool_size:'pool',max_teacher_uses:'max-uses',strategy:'strategy',seed:'seed',min_score:'min-score',relative_score:'rel-score',strict:'strict',allow_unknown_title:'allow-unknown'};
+ for(const [key,suffix] of Object.entries(map)){const field=document.getElementById('param-'+suffix);if(field.type==='checkbox')field.checked=data.match_defaults[key];else field.value=data.match_defaults[key];}
+ updateParamsSummaryLabel();
+}
+async function loadPreferences(){try{populatePreferences(await appRequest('/api/preferences'));}catch(error){document.getElementById('pref-feedback').textContent=error.message;}}
+async function initializeApplication(){
+ try{
+  await loadPreferences();if(appPreferences)applyDefaults(appPreferences);
+  const status=await appRequest('/api/app/status');document.getElementById('btn-exit-app').hidden=!status.can_exit;
+  const heartbeat=()=>appRequest('/api/app/client',{id:clientId,mode:desktopInterface?'desktop':'browser'}).catch(()=>{});
+  await heartbeat();heartbeatTimer=setInterval(heartbeat,15000);
+  if(appPreferences&&!appPreferences.storage_confirmed){document.getElementById('first-storage-path').textContent=appPreferences.data_dir;document.getElementById('first-storage-modal').classList.add('open');}
+  window.JZReady=true;
+ }catch(error){document.getElementById('pref-feedback').textContent=error.message;}
+}
+window.addEventListener('pagehide',()=>navigator.sendBeacon('/api/app/client',new Blob([JSON.stringify({id:clientId,closed:true})],{type:'application/json'})));
+async function confirmInitialStorage(){
+ try{populatePreferences(await appRequest('/api/preferences',{data_dir:appPreferences.data_dir}));document.getElementById('first-storage-modal').classList.remove('open');}
+ catch(error){document.getElementById('first-storage-error').textContent=error.message;}
+}
+function configureInitialStorage(){document.getElementById('first-storage-modal').classList.remove('open');switchPage('preferences');}
+async function choosePreferenceDirectory(){
+ try{
+  const path=window.pywebview?.api?await window.pywebview.api.choose_data_dir():(await appRequest('/api/preferences/choose-folder',{})).path;
+  if(path)document.getElementById('pref-data-dir').value=path;
+ }catch(error){document.getElementById('pref-feedback').textContent=error.message;}
+}
+async function savePreferences(){
+ const button=document.getElementById('pref-save');button.disabled=true;
+ try{
+  const defaults={};for(const [key,,type] of preferenceFields){const field=document.getElementById('pref-'+key);defaults[key]=type==='checkbox'?field.checked:type==='number'?Number(field.value):field.value;}
+  const path=document.getElementById('pref-data-dir').value.trim();
+  if(path!==appPreferences.data_dir&&!confirm('更换数据目录会影响所有已打开界面。现有数据保留原位置副本，确认继续？'))return;
+  populatePreferences(await appRequest('/api/preferences',{data_dir:path,migration:document.getElementById('pref-migration').value,retain_uploads:document.getElementById('pref-retain-uploads').checked,match_defaults:defaults}));
+  applyDefaults(appPreferences);document.getElementById('pref-feedback').textContent='已保存。默认参数已应用到匹配页面。';loadDbStats();
+ }catch(error){document.getElementById('pref-feedback').textContent=error.message;}finally{button.disabled=false;}
+}
+async function openStorageFolder(kind){try{await appRequest('/api/preferences/open-folder',{kind});}catch(error){alert(error.message);}}
+async function downloadAppFile(url,fallback){
+ try{
+  const response=await fetch(url);if(!response.ok){const data=await response.json();throw new Error(data.error||'导出失败');}
+  const blob=await response.blob();
+  if(window.pywebview?.api){
+   const reader=new FileReader();reader.onload=async()=>{try{await window.pywebview.api.save_export(fallback,String(reader.result).split(',')[1]);}catch(error){alert(error.message);}};reader.readAsDataURL(blob);
+  }else{const address=URL.createObjectURL(blob),anchor=document.createElement('a');anchor.href=address;anchor.download=fallback;anchor.click();setTimeout(()=>URL.revokeObjectURL(address),30000);}
+ }catch(error){alert(error.message);}
+}
+async function restoreDatabase(event){
+ const file=event.target.files?.[0];if(!file)return;
+ if(!confirm('将恢复所选教师库。当前教师库会先备份，确认继续？'))return;
+ try{const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});const result=await appRequest('/api/preferences/restore',{file_base64:encoded});document.getElementById('pref-feedback').textContent=result.message;await loadPreferences();loadDbStats();}
+ catch(error){document.getElementById('pref-feedback').textContent=error.message;}finally{event.target.value='';}
+}
+async function exitApplication(){
+ try{
+  const status=await appRequest('/api/app/status');if(status.busy)throw new Error('请等待匹配或维护任务结束后再退出。');
+  if(status.clients>1&&!confirm(`当前有 ${status.clients} 个界面连接共享后台。退出后其他界面也会断开，是否继续？`))return;
+  await appRequest('/api/app/shutdown',{token:status.exit_token,confirm_all:status.clients>1});clearInterval(heartbeatTimer);
+  if(window.pywebview?.api){await window.pywebview.api.close_window();return;}
+  document.body.innerHTML='<main style="padding:12vh 8vw;font-family:system-ui"><h1>程序已退出</h1><p>共享后台已停止，可以关闭此页面。再次使用时请启动程序。</p></main>';
+ }catch(error){alert(error.message);}
+}
+
+// 匹配结果出现后页面可能新增纵向滚动条，容器随之变窄；重新分配长字段。
+const tableContainerWidths=new WeakMap();
+const tableContainerObserver=new ResizeObserver(entries=>{
+ let changed=false;for(const entry of entries){const width=entry.contentRect.width;if(width>0&&tableContainerWidths.get(entry.target)!==width){tableContainerWidths.set(entry.target,width);changed=true;}}
+ if(changed){clearTimeout(fitResizeTimer);fitResizeTimer=setTimeout(()=>{if(currentMatchData)renderMatchPreviewTable();applyDatabaseWidths();},100);}
+});
+for(const id of ['match-preview-wrap','db-faculty-table']){const element=document.getElementById(id);if(element)tableContainerObserver.observe(id==='db-faculty-table'?element.parentElement:element);}

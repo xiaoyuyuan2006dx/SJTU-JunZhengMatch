@@ -9,7 +9,8 @@ except ImportError:
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DB_PATH = SCRIPT_DIR / "sjtu_faculty_data" / "sjtu_faculty_data.db"
+from . import preferences, paths
+DB_PATH = preferences.PreferenceStore().data_dir() / "sjtu_faculty_data.db"
 
 PAGE_SIZE = 20  # 每页固定20行
 

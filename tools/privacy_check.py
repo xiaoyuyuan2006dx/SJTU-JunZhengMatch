@@ -30,7 +30,7 @@ def check():
         tables={r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         if not rows:errors.append('faculty.db: public faculty database is empty')
         if not tables <= {'faculty','sqlite_sequence'}:errors.append('faculty.db: unexpected non-faculty table')
-    import sjtu_excel_io as xio
+    from junzheng_match import sjtu_excel_io as xio
     for student in xio.fictional_students():
         if student['name'] not in {'张三','李四','王五','赵六','孙七','周八'} or not student['student_id'].startswith('52x') or not student['advisor'].endswith('老师'):
             errors.append('example generator: non-synthetic student')
@@ -39,5 +39,5 @@ def check():
 
 
 if __name__=='__main__':
-    sys.path.insert(0,str(ROOT))
+    sys.path.insert(0,str(ROOT/"src"))
     print(check())

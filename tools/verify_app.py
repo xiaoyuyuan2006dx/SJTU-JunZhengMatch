@@ -19,7 +19,7 @@ def verify(executable=None):
         with socket.socket() as sock:
             sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         address=f'http://127.0.0.1:{port}'
-        command=[str(Path(executable).resolve())] if executable else [sys.executable,str(root/'entrypoint.py')]
+        command=[str(Path(executable).resolve())] if executable else [sys.executable,str(root/'packaging/launcher.py')]
         env={**os.environ,'JZ_DATA_DIR':directory,'JZ_PASSWORD':'','JZ_HOST':'127.0.0.1'}
         with open(Path(directory)/'process.log','wb') as log:
             process=subprocess.Popen(command+['--port',str(port),'--no-open'],env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=log)

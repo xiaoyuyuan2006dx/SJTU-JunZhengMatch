@@ -17,8 +17,9 @@ from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Config
+from ..preferences import PreferenceStore
 SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_DIR = Path(os.getenv("JZ_DATA_DIR", SCRIPT_DIR / "sjtu_faculty_data"))
+DATA_DIR = PreferenceStore().data_dir()
 DB_PATH = Path(os.getenv("FACULTY_DB", DATA_DIR / "sjtu_faculty_data.db"))
 MAX_WORKERS = 8
 REQUEST_DELAY = 0.15

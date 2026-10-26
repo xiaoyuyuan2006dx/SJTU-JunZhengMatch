@@ -11,8 +11,9 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 
+from ..preferences import PreferenceStore
 SCRIPT_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.getenv("FACULTY_DB", SCRIPT_DIR / "sjtu_faculty_data" / "sjtu_faculty_data.db"))
+DB_PATH = Path(os.getenv("FACULTY_DB", PreferenceStore().data_dir() / "sjtu_faculty_data.db"))
 
 # 交大院系列表 → 用于从搜索结果URL中识别学院
 SJTU_COLLEGES = {

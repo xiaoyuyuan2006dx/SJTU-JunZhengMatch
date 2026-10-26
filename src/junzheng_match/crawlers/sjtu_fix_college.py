@@ -9,8 +9,9 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from ..preferences import PreferenceStore
 SCRIPT_DIR = Path(__file__).resolve().parent
-DB_PATH = Path(os.getenv("FACULTY_DB", SCRIPT_DIR / "sjtu_faculty_data" / "sjtu_faculty_data.db"))
+DB_PATH = Path(os.getenv("FACULTY_DB", PreferenceStore().data_dir() / "sjtu_faculty_data.db"))
 MAX_WORKERS = 8
 TIMEOUT = 12
 
