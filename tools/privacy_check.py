@@ -32,7 +32,7 @@ def check():
         if not tables <= {'faculty','sqlite_sequence'}:errors.append('faculty.db: unexpected non-faculty table')
     import sjtu_excel_io as xio
     for student in xio.fictional_students():
-        if not student['name'].startswith('示例学生') or not student['student_id'].startswith('DEMO-') or not student['advisor'].startswith('示例导师'):
+        if student['name'] not in {'张三','李四','王五','赵六','孙七','周八'} or not student['student_id'].startswith('52x') or not student['advisor'].endswith('老师'):
             errors.append('example generator: non-synthetic student')
     if errors:raise RuntimeError('\n'.join(errors))
     return dict(status='ok',public_faculty=len(rows),real_students=0,private_databases=0)

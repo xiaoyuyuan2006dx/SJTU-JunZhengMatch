@@ -72,7 +72,7 @@
             <a class="text-link" href="/api/template?type=student&format=xlsx" download>下载 .xlsx 模板</a>
             <a class="text-link" href="/api/template?type=student&format=csv" download>下载 .csv 模板</a>
             <span class="template-separator">/</span>
-            <a class="text-link" href="/api/template?type=example&format=xlsx" download>下载示例模板（虚构数据）</a>
+            <a class="text-link" href="/api/template?type=example&format=xlsx" download>下载示例模板</a>
           </div>
 
           <button class="doc-link-btn" id="btn-toggle-params" onclick="toggleParamsDrawer()">
@@ -411,7 +411,7 @@
       <div id="db-subview-colleges" style="display:none;">
         <div class="card">
           <div class="card-header">
-            <div class="card-title">各院系教师分布（按院系字典序排列 · 点击院系可筛选查看）</div>
+            <div class="card-title">各院系教师分布</div>
           </div>
           <div id="college-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;"></div>
         </div>
@@ -529,5 +529,6 @@
   </div>
 
   <script src="/app.js"></script>
+<img class="kotone-background" src="/frontend/kotone-mascot.jpg" alt="" aria-hidden="true" />
 </body>
 </html>

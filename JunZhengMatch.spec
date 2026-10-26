@@ -2,7 +2,7 @@
 from pathlib import Path
 root=Path(SPECPATH)
 assets=[(str(root/'frontend'),'frontend'),(str(root/'data'),'data'),
-        (str(root/'README.md'),'.'),(str(root/'ARCHITECTURE.md'),'.')]
+        (str(root/'README.md'),'.'),(str(root/'ARCHITECTURE.md'),'.'),(str(root/'ASSETS.md'),'.')]
 for name in ['sjtu_faculty_scraper.py','sjtu_scrape_research.py','sjtu_fix_college.py','sjtu_web_fix_college.py']:
     assets.append((str(root/name),'.'))
 a=Analysis([str(root/'entrypoint.py')],pathex=[str(root)],binaries=[],datas=assets,

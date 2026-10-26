@@ -4,7 +4,7 @@
  * 1. 匹配预览与数据库表均采用固定列宽、固定单元格高度、无任何内部滚动条
  * 2. 匹配预览中的「同学课题」支持 2–3 行自然换行完整显示；「学生学号」完整显示
  * 3. 匹配预览中导师与评审学院显示简称（如电院、数院、高金），数据库与导出保留去掉“上海交通大学”前缀后的完整院系名
- * 4. 数据库院系概览按字典序排列；新增/编辑教师弹窗提供已有院系下拉选项，若输入未出现过的新院系则实时警告并二次确认
+ * 4. 数据库院系概览按拼音A–Z排列；新增/编辑教师弹窗提供已有院系下拉选项，若输入未出现过的新院系则实时警告并二次确认
  */
 
 let currentMatchFileBase64 = "";
@@ -40,7 +40,7 @@ function stripSjtuPrefix(name) {
 }
 
 // 短字段按整份结果测量后固定像素宽度；长字段分配剩余空间。
-function formatShortStudentId(sid) { return String(sid || "").trim() || "-"; }
+function formatShortStudentId(sid) { const value=String(sid || "").trim(); return value.length>3 ? value.slice(0,3)+"..." : value||"-"; }
 const widthCanvas = document.createElement("canvas");
 function fittedWidth(header, values, {mono=false,bold=false,extra=0}={}) {
   const ctx = widthCanvas.getContext("2d");
@@ -51,26 +51,42 @@ function fittedWidth(header, values, {mono=false,bold=false,extra=0}={}) {
   for (const value of values) max=Math.max(max,ctx.measureText(String(value || "-")).width+extra);
   return Math.ceil(max)+18; // 左右8px内边距+边框；不使用百分比压缩短字段。
 }
-function fittedColumns(specs, availableWidth) {
+function fittedColumns(specs, availableWidth, compact=false) {
   const widths=specs.map(s=>s.width||s.min||120);
   const base=widths.reduce((a,b)=>a+b,0);
   const weights=specs.reduce((n,s)=>n+(s.width?0:(s.weight||1)),0);
   if (availableWidth>base && weights) specs.forEach((s,i)=>{if(!s.width)widths[i]+=(availableWidth-base)*(s.weight||1)/weights;});
+  if(compact && base>availableWidth){const fixed=specs.reduce((n,s)=>n+(s.width||0),0); const flexible=specs.reduce((n,s)=>n+(s.width?0:(s.min||120)),0); specs.forEach((s,i)=>{if(!s.width)widths[i]=(s.min||120)*Math.max(0,availableWidth-fixed)/flexible;});}
   const integers=widths.map(Math.floor);
   let remainder=Math.max(0,Math.round(widths.reduce((a,b)=>a+b,0))-integers.reduce((a,b)=>a+b,0));
   specs.forEach((s,i)=>{if(!s.width&&remainder>0){integers[i]++;remainder--;}});
   return {html:integers.map((w,i)=>`<col data-fit="${specs[i].width?"fixed":"flex"}" style="width:${w}px"/>`).join(""),width:integers.reduce((a,b)=>a+b,0)};
+}
+function labelPreviewCells(){
+  const table=document.querySelector("#match-preview-wrap table");if(!table)return;
+  const headers=Array.from(table.querySelectorAll("thead th"),e=>e.textContent.trim());
+  const spans=[];
+  for(const row of table.querySelectorAll("tbody tr")){
+    let col=0;
+    for(const cell of row.cells){
+      while(spans[col]>0)col++;
+      cell.dataset.label=headers[col]||"";
+      for(let n=0;n<cell.colSpan;n++)spans[col+n]=cell.rowSpan;
+      col+=cell.colSpan;
+    }
+    for(let i=0;i<spans.length;i++)if(spans[i]>0)spans[i]--;
+  }
 }
 function applyDatabaseWidths() {
   const table=document.getElementById("db-faculty-table");if(!table)return;
   const rows=dbLayoutSamples.length?dbLayoutSamples:dbCurrentItems;
   const specs=[
     {width:fittedWidth("序号/ID",["#99999"],{mono:true})},
-    {width:fittedWidth("姓名",rows.map(r=>r.name),{bold:true,extra:15})},
-    {width:fittedWidth("职称",rows.map(r=>r.title),{extra:18})},
-    {width:fittedWidth("院系（完整名称）",rows.map(r=>stripSjtuPrefix(r.department||r.college)))},
+    {width:Math.min(100,fittedWidth("姓名",rows.map(r=>r.name),{bold:true,extra:15}))},
+    {width:Math.min(112,fittedWidth("职称",rows.map(r=>r.title),{extra:18}))},
+    {width:180},
     {width:fittedWidth("邮箱 / 电话",rows.map(r=>r.email||r.phone||r.mobile||"-"))},
-    {min:200,weight:1}, {width:114}
+    {min:340,weight:1}, {width:114}
   ];
   const fitted=fittedColumns(specs,table.parentElement.clientWidth);
   table.querySelector("colgroup").innerHTML=fitted.html;table.style.width=`${fitted.width}px`;
@@ -511,13 +527,13 @@ function renderMatchPreviewTable() {
     const fixed=[
       {width:fittedWidth("序号",allItems.map(s=>s.seq))},
       {width:fittedWidth("姓名",allItems.map(s=>s.name),{bold:true})},
-      {width:fittedWidth("学号",allItems.map(s=>s.student_id),{mono:true})},
+      {width:fittedWidth("学号",allItems.map(s=>formatShortStudentId(s.student_id)),{mono:true})},
       {min:180,weight:2},
       {width:fittedWidth("导师",allItems.map(s=>s.advisor))},
       {min:80,weight:.6},
       ...Array.from({length:kShow},()=>({min:180,weight:1}))
     ];
-    const horizontalFit=fittedColumns(fixed,wrap.clientWidth);
+    const horizontalFit=fittedColumns(fixed,wrap.clientWidth,true);
     const colgroup=horizontalFit.html;
 
     let ths = `
@@ -566,6 +582,7 @@ function renderMatchPreviewTable() {
     }
 
     wrap.innerHTML = `<table class="fixed-table" style="width:${horizontalFit.width}px"><colgroup>${colgroup}</colgroup><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+    labelPreviewCells();
     return;
   }
 
@@ -576,17 +593,17 @@ function renderMatchPreviewTable() {
     {width:fittedWidth("序号",allItems.map(s=>s.seq))},
     {width:fittedWidth("课题类别",allItems.map(s=>s.category))},
     {width:fittedWidth("学生姓名",allItems.map(s=>s.name),{bold:true})},
-    {width:fittedWidth("学号",allItems.map(s=>s.student_id),{mono:true})},
+    {width:fittedWidth("学号",allItems.map(s=>formatShortStudentId(s.student_id)),{mono:true})},
     {min:170,weight:2},
     {width:fittedWidth("导师",allItems.map(s=>s.advisor))},
     {min:76,weight:.7},
     {width:fittedWidth("拟定评审",reviewers.map(r=>r.name),{bold:true})},
     {min:76,weight:.7},
     {width:fittedWidth("职称",reviewers.map(r=>r.title))},
-    {min:135,weight:.8}, {min:150,weight:1.2}, {min:120,weight:1},
+    {min:135,weight:.8}, {min:150,weight:1.2}, {width:fittedWidth("匹配方向",["课题方向"],{extra:12})},
     {width:fittedWidth("相近度",["0.000"],{mono:true,bold:true,extra:12})}
   ];
-  const mergedFit=fittedColumns(specs,wrap.clientWidth);
+  const mergedFit=fittedColumns(specs,wrap.clientWidth,true);
   let html = `
     <table class="fixed-table" style="width:${mergedFit.width}px">
       <colgroup>${mergedFit.html}</colgroup>
@@ -644,7 +661,7 @@ function renderMatchPreviewTable() {
           <td title="${escapeHtml(rev.title)}">${escapeHtml(rev.title)}</td>
           <td style="font-size:11.5px;" title="${escapeHtml(contactTip)}">${escapeHtml(contactStr)}</td>
           <td title="${escapeHtml(rev.research_direction)}">${escapeHtml(rev.research_direction || "-")}</td>
-          <td title="${escapeHtml(rev.match_direction)}"><span class="badge ${badgeCls}">${escapeHtml(rev.match_direction)}</span></td>
+          <td title="${escapeHtml(rev.match_direction)}"><span class="badge ${badgeCls}">${escapeHtml((rev.match_direction||"-").slice(0,4))}</span></td>
           <td style="text-align:center;" title="推荐相近度: ${rev.similarity.toFixed(4)}"><span class="score-pill">${rev.similarity.toFixed(3)}</span></td>
         `;
       } else {
@@ -656,6 +673,7 @@ function renderMatchPreviewTable() {
 
   html += `</tbody></table>`;
   wrap.innerHTML = html;
+  labelPreviewCells();
 }
 
 function exportMatchedResult(format) {
@@ -678,8 +696,12 @@ async function loadDbStats() {
     document.getElementById("db-stat-email").textContent = `${data.email_pct}%`;
     document.getElementById("db-stat-email-sub").textContent = `${data.with_email} / ${data.total} 人含邮箱`;
 
-    // 记录已知完整院系名（已去除“上海交通大学”前缀，按字典序排列），填充 datalist
-    knownCollegesSet = new Set(data.known_colleges || []);
+    // 记录已知完整院系名（已去除“上海交通大学”前缀，按拼音排列），填充 datalist
+    const pinyinOrder=new Intl.Collator("zh-Hans-CN-u-co-pinyin");
+    const byPinyin=(a,b)=>(a==="(未填院系)")-(b==="(未填院系)")||pinyinOrder.compare(a,b);
+    data.known_colleges=(data.known_colleges||[]).sort(byPinyin);
+    data.colleges=(data.colleges||[]).sort((a,b)=>byPinyin(a.name,b.name));
+    knownCollegesSet = new Set(data.known_colleges);
     const datalist = document.getElementById("college-options-datalist");
     if (datalist && data.known_colleges) {
       datalist.innerHTML = data.known_colleges
@@ -687,7 +709,7 @@ async function loadDbStats() {
         .join("");
     }
 
-    // 院系概览（后端已按字典序排序，显示去掉上海交通大学后的完整名称与简称）
+    // 院系概览（前端按拼音排序，显示去掉上海交通大学后的完整名称与简称）
     const grid = document.getElementById("college-stats-grid");
     if (grid && data.colleges) {
       grid.innerHTML = data.colleges

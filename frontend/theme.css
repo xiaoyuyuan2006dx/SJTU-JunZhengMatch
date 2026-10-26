@@ -1030,7 +1030,7 @@ html, body {
   pointer-events: none;
 }
 
-/* 内容适配的固定短字段 + 琴音灵感：奶油金、浅杏与星结。无角色图片依赖。 */
+/* 内容适配的固定短字段 + 琴音灵感：奶油金、浅杏与星结。背景装饰可独立替换。 */
 :root {--orange-primary:#d6a13a;--orange-hover:#bd8728;--orange-soft-bg:#fff4d8;--orange-soft-border:#eddaac;--orange-deep-text:#825c1e;}
 .kotone-mark{background:#fff1bc;color:#946a21;box-shadow:none;border:1px solid #e7cc7b;position:relative;transform:rotate(-5deg);font-size:23px;}
 .kotone-mark::after{content:"";position:absolute;width:9px;height:9px;border:2px solid #dfb85d;border-radius:2px;right:-3px;bottom:0;transform:rotate(42deg);background:#fffdf4;}
@@ -1052,3 +1052,21 @@ html, body {
 .btn-primary{background:#f1ca69;border-color:#d8af4e;color:#49320e;box-shadow:none}.btn-primary:hover:not(:disabled){background:#e7bc54;border-color:#cda143;color:#49320e}
 
 .table-wrap .fixed-table thead th{top:0;}
+
+/* 匹配预览随容器收缩；窄窗口按带字段标签的卡片呈现，保留全部信息。 */
+#match-preview-wrap{overflow-x:hidden;}
+#match-preview-wrap .fixed-table{min-width:0;max-width:100%;}
+#match-preview-wrap th{padding-left:6px;padding-right:6px;}
+.kotone-background{position:fixed;right:max(8px,calc((100vw - 1360px)/2 - 180px));bottom:50px;width:165px;height:auto;max-height:42vh;object-fit:contain;pointer-events:none;user-select:none;z-index:0;opacity:.58;mix-blend-mode:multiply;}
+.main-container{position:relative;z-index:1;}
+@media(min-width:1480px) and (max-width:1719px){.kotone-background{width:calc((100vw - 1360px)/2 - 12px);right:6px;}}
+@media(max-width:1479px){.kotone-background{display:none;}}
+@media(max-width:1000px){
+ #match-preview-wrap table,#match-preview-wrap tbody{display:block;width:100%!important;}
+ #match-preview-wrap colgroup,#match-preview-wrap thead{display:none;}
+ #match-preview-wrap tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border:1px solid var(--border-light);border-radius:8px;margin-bottom:10px;overflow:hidden;}
+ #match-preview-wrap td{display:block;width:auto!important;height:auto!important;max-height:none!important;min-width:0;white-space:normal!important;padding:7px 9px!important;line-height:1.5;text-align:left!important;overflow-wrap:anywhere;}
+ #match-preview-wrap td::before{content:attr(data-label);display:block;color:var(--ink-muted);font-size:10px;font-weight:400;}
+ #match-preview-wrap .topic-wrap-cell{grid-column:1/-1;}
+ #match-preview-wrap .badge{max-width:100%;}
+}

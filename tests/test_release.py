@@ -26,7 +26,8 @@ class WorkbookTests(unittest.TestCase):
         rows=xio.read_xlsx_rows(io.BytesIO(xio.generate_example_template_xlsx()))
         students,_,banner=xio.parse_students_from_rows(rows)
         self.assertEqual(len(students),6)
-        self.assertTrue(all(s['name'].startswith('示例学生') and s['student_id'].startswith('DEMO-') for s in students))
+        self.assertTrue(all(s['name'] in {'张三','李四','王五','赵六','孙七','周八'} and s['student_id'].startswith('52x') for s in students))
+        self.assertEqual({s["category"] for s in students},{"人文社科类","信息技术类","机械控制自动化类","生农医药类","能源化工材料类"})
         self.assertEqual(banner,xio.DEFAULT_TASK_BANNER)
 
     def test_blank_templates_are_header_only(self):
