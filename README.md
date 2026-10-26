@@ -109,7 +109,7 @@ JZ_PASSWORD='替换为至少12字符的密码' docker compose up -d --build
 
 # 视觉说明
 
-暖米白和浅杏配色，使用用户提供的藤田琴音背景及内置程序图标。背景装饰仅在宽屏侧边显示，不遮挡表格；图片来源与权利说明见 [ASSETS.md](ASSETS.md)。水印为 `TaroDeluxe · Codex & SJTU ZhuXueBu & CTP`。
+暖米白和浅杏配色，使用用户提供的藤田琴音背景及内置程序图标。左右人物仅在宽屏侧边显示，不遮挡表格；安装引导右侧使用用户提供的樱花琴音插图；图片来源与权利说明见 [ASSETS.md](ASSETS.md)。水印为 `TaroDeluxe · Codex & SJTU ZhuXueBu & CTP`。
 
 ## 调整背景和动画
 

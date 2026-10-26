@@ -28,10 +28,10 @@ try {
   $config=Get-Content (Join-Path $env:USERPROFILE 'JunZhenMatch/preferences.json') | ConvertFrom-Json
   if ([IO.Path]::GetFullPath($config.data_dir).TrimEnd('\') -ne [IO.Path]::GetFullPath($data).TrimEnd('\')) { throw "Installer data directory mismatch. Expected: $data; actual: $($config.data_dir)" }
   $shell=New-Object -ComObject WScript.Shell
-  $shortcutPath=Join-Path ([Environment]::GetFolderPath('Programs')) 'JunZhenMatch/䇹政导师匹配.lnk'
+  $shortcutPath=[IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('Programs')) 'JunZhenMatch/䇹政导师匹配.lnk'))
   if (!(Test-Path $shortcutPath)) { throw 'Start menu shortcut is missing' }
   $shortcut=$shell.CreateShortcut($shortcutPath)
-  if ($shortcut.Arguments -ne '--desktop') { throw 'Shortcut does not launch the independent window' }
+  if ($shortcut.Arguments -ne '--desktop') { throw "Shortcut mode mismatch. Actual: $($shortcut.Arguments); target: $($shortcut.TargetPath)" }
   python tools/verify_runtime.py --exe $exe --desktop --report installed-runtime-test.json
   if ($LASTEXITCODE -ne 0) { throw 'Installed desktop/runtime verification failed' }
   New-Item -ItemType Directory -Force $data | Out-Null

@@ -73,7 +73,6 @@ jobs:
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') { throw 'WebView2 signature validation failed' }
           $process=Start-Process dist/JunZhengMatch.exe -ArgumentList '--configure-data',"$env:RUNNER_TEMP\jz-desktop-prereq",'--ensure-webview2','--no-open' -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw 'WebView2 setup failed' }
-      - run: python tools/verify_runtime.py --exe dist/JunZhengMatch.exe --desktop --report exe-runtime-test.json
       - name: Build per-user MSI
         shell: pwsh
         run: |
@@ -84,6 +83,7 @@ jobs:
       - name: Install, verify and uninstall MSI
         shell: pwsh
         run: ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -Report installer-test.json
+      - run: python tools/verify_runtime.py --exe dist/JunZhengMatch.exe --desktop --report exe-runtime-test.json
       - uses: actions/download-artifact@v4
         with:
           name: checks
