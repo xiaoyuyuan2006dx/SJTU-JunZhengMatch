@@ -43,6 +43,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements-dev.txt
       - run: pyinstaller --clean --noconfirm JunZhengMatch.spec
+      - run: python tools/verify_icon.py --exe dist/JunZhengMatch.exe --report exe-icon-test.json
       - name: Verify native EXE
         shell: pwsh
         run: |
@@ -60,7 +61,7 @@ jobs:
       - name: Package portable Windows download
         shell: pwsh
         run: |
-          Copy-Item exe-self-test.json,exe-http-test.json release/
+          Copy-Item exe-self-test.json,exe-http-test.json,exe-icon-test.json release/
           Compress-Archive -Path release/* -DestinationPath release/SJTU-JunZhengMatch-Windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:

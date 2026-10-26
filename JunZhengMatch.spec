@@ -9,4 +9,4 @@ a=Analysis([str(root/'entrypoint.py')],pathex=[str(root)],binaries=[],datas=asse
            hiddenimports=['requests','bs4','concurrent.futures','sjtu_faculty_scraper','sjtu_scrape_research','sjtu_fix_college','sjtu_web_fix_college'],excludes=['pandas','numpy','sklearn','matplotlib','tkinter'],noarchive=False)
 pyz=PYZ(a.pure)
 exe=EXE(pyz,a.scripts,a.binaries,a.datas,[],name='JunZhengMatch',debug=False,bootloader_ignore_signals=False,
-        strip=False,upx=False,console=False,disable_windowed_traceback=False)
+        icon=str(root/"assets/app.ico"),strip=False,upx=False,console=False,disable_windowed_traceback=False)

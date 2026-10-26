@@ -55,3 +55,7 @@ Windows runner 使用 Python 3.12 和 PyInstaller 构建 x64 单文件 EXE。只
 ## 背景装饰
 
 当前使用用户提供的 frontend/kotone-mascot.png，通过固定静态路由提供，并随Docker/EXE打包。图片不访问外部图床；CSS将其置于内容层下方，1480px以下隐藏。替换图片时同步检查静态路由、前端路径和ASSETS.md，不沿用旧图片的作者署名。
+
+## Windows图标资源
+
+PyInstaller的EXE配置通过 `icon=assets/app.ico` 嵌入多尺寸图标。原始PNG与ICO保存在assets目录，背景图仍使用frontend目录中的原有图片。Windows构建后执行tools/verify_icon.py，逐一核对PE内RT_ICON资源与ICO图像负载的SHA256，确认实际EXE内含选定图标；验证报告随Windows ZIP发布。
