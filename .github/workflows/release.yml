@@ -1,0 +1,86 @@
+name: Test and Release
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python entrypoint.py --self-test --report self-test.json
+      - run: python tools/privacy_check.py
+  windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - run: pyinstaller --clean --noconfirm JunZhengMatch.spec
+      - name: Verify native EXE
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath '.\dist\JunZhengMatch.exe' -ArgumentList '--self-test','--report','exe-self-test.json' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "EXE smoke test failed ($($p.ExitCode))" }
+          if (!(Test-Path exe-self-test.json)) { throw 'EXE did not produce a smoke-test report' }
+          $report = Get-Content exe-self-test.json | ConvertFrom-Json
+          if ($report.status -ne 'ok' -or $report.reviewers -ne 18) { throw 'EXE verification failed' }
+          New-Item -ItemType Directory -Force release | Out-Null
+          Copy-Item dist/JunZhengMatch.exe release/
+          Copy-Item WINDOWS.md release/Windows-使用说明.md
+          Get-FileHash release/JunZhengMatch.exe -Algorithm SHA256 | Format-List | Out-File release/Windows-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: release/*
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and verify container
+        run: |
+          docker build -t sjtu-junzhengmatch:release .
+          docker run --rm sjtu-junzhengmatch:release python entrypoint.py --self-test --report /tmp/test.json
+          docker run -d --name reviewer-smoke -e JZ_PASSWORD=synthetic-ci-password -p 127.0.0.1:8765:8765 sjtu-junzhengmatch:release
+          for i in $(seq 1 30); do curl --fail --silent http://127.0.0.1:8765/health && break || sleep 1; done
+          curl --fail --silent http://127.0.0.1:8765/health
+          docker rm -f reviewer-smoke
+          mkdir -p release
+          docker save sjtu-junzhengmatch:release | gzip > release/SJTU-JunZhengMatch-Docker.tar.gz
+          cd release && sha256sum *.tar.gz > Docker-SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docker-image
+          path: release/*
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, docker]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Publish verified release files
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "$TAG" --generate-notes
+          gh release upload "$TAG" release/* --clobber

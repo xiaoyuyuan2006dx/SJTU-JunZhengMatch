@@ -1,0 +1,12 @@
+services:
+  junzheng:
+    build: .
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      JZ_PASSWORD: ${JZ_PASSWORD:?Set JZ_PASSWORD to at least 12 characters}
+    volumes:
+      - faculty-data:/data
+    restart: unless-stopped
+volumes:
+  faculty-data:

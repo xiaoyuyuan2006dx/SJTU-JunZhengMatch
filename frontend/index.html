@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>䇹政盲审导师匹配与教师库平台</title>
+  <!-- 独立抽离的淡橙色极简主题样式表 (frontend/theme.css) -->
+  <link rel="stylesheet" href="/theme.css" />
+</head>
+<body>
+  <!-- 顶部极简导航栏：盲审匹配、数据库维护 | README、ARCHITECTURE、个人 GitHub (xiaoyuyuan2006dx) -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-area">
+        <div class="brand-dot kotone-mark" aria-label="琴音灵感：金色星结"><span>✦</span></div>
+        <div class="brand-title">䇹政盲审导师匹配系统</div>
+      </div>
+
+      <nav class="nav-pills">
+        <button class="nav-btn active" id="nav-match" onclick="switchPage('match')">
+          <span>盲审匹配</span>
+        </button>
+        <button class="nav-btn" id="nav-db" onclick="switchPage('db')">
+          <span>数据库维护</span>
+          <span class="db-pill" id="top-db-count">...</span>
+        </button>
+      </nav>
+
+      <div class="nav-doc-links">
+        <button class="doc-link-btn" onclick="openDocModal('README')">README</button>
+        <button class="doc-link-btn" onclick="openDocModal('ARCHITECTURE')">ARCHITECTURE</button>
+        <a class="doc-link-btn" href="https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch" target="_blank" rel="noopener noreferrer" title="访问 xiaoyuyuan2006dx 的 GitHub">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" style="vertical-align:-2px;">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          <span>xiaoyuyuan2006dx</span>
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="main-container">
+    <!-- ==================== 页面 1：默认页面（盲审匹配） ==================== -->
+    <section id="page-match" class="page-view active">
+      <div class="hero-workbench">
+        <div class="workbench-top">
+          <div class="upload-dropzone" id="match-dropzone" onclick="document.getElementById('match-file-input').click()">
+            <input type="file" id="match-file-input" accept=".xlsx,.csv" style="display:none" onchange="onMatchFileSelected(event)" />
+            <div class="upload-info">
+              <div class="upload-icon-circle">↑</div>
+              <div style="min-width:0;">
+                <div class="upload-title" id="match-file-label">点击或拖拽上传学生课题表 (.xlsx / .csv)</div>
+                <div class="upload-hint">支持带合并单元格的原表，或单横行对齐的空白模板表</div>
+              </div>
+            </div>
+            <span class="btn btn-sm btn-soft" onclick="event.stopPropagation(); document.getElementById('match-file-input').click();">选择文件</span>
+          </div>
+
+          <div class="workbench-actions">
+            <button class="btn btn-lg" onclick="runMatch(true)" title="使用完全虚构的学生资料预览匹配效果">
+              载入示例表
+            </button>
+            <button class="btn btn-primary btn-lg" id="btn-run-match" onclick="runMatch(false)">
+              开始匹配预览
+            </button>
+          </div>
+        </div>
+
+        <div class="workbench-footer">
+          <div class="template-links">
+            <span>空白上传模板（单横行对齐）：</span>
+            <a class="text-link" href="/api/template?type=student&format=xlsx" download>下载 .xlsx 模板</a>
+            <a class="text-link" href="/api/template?type=student&format=csv" download>下载 .csv 模板</a>
+            <span class="template-separator">/</span>
+            <a class="text-link" href="/api/template?type=example&format=xlsx" download>下载示例模板（虚构数据）</a>
+          </div>
+
+          <button class="doc-link-btn" id="btn-toggle-params" onclick="toggleParamsDrawer()">
+            <span id="params-summary-label">⚙️ 匹配参数设置（全部学生 · 每人 3 位 · 候选池 20 · 排名优先 · 自动补齐）▾</span>
+          </button>
+        </div>
+
+        <!-- 严格统一尺寸与对齐的 4×2 参数网格 -->
+        <div class="params-drawer" id="params-drawer">
+          <div class="params-grid">
+            <div class="form-group">
+              <label class="form-label">学生筛选方式</label>
+              <select class="select" id="param-filter-mode" onchange="onFilterModeChange()">
+                <option value="all">全部学生 (默认)</option>
+                <option value="range">序号范围 (--range N-M)</option>
+                <option value="student">单个学生序号 (--student N)</option>
+                <option value="name">学生姓名关键词 (--name)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" id="param-filter-value-label">筛选条件值</label>
+              <input type="text" class="input" id="param-filter-value" placeholder="全部学生无需填写" disabled onchange="updateParamsSummaryLabel()" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">每人匹配评审数 (--pick)</label>
+              <input type="number" class="input" id="param-pick" value="3" min="1" max="15" onchange="updateParamsSummaryLabel()" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">候选池大小 (--pool)</label>
+              <input type="number" class="input" id="param-pool" value="20" min="1" max="200" onchange="updateParamsSummaryLabel()" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">选取策略 (--strategy)</label>
+              <select class="select" id="param-strategy" onchange="updateParamsSummaryLabel()">
+                <option value="top">按排名优先 (top)</option>
+                <option value="weighted">加权随机抽样 (weighted)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">随机种子 (--seed)</label>
+              <input type="number" class="input" id="param-seed" value="42" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">最低相似度 (--min-score)</label>
+              <input type="number" class="input" id="param-min-score" value="0.05" step="0.01" min="0" max="1" />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">相对分比例 (--relative-score)</label>
+              <input type="number" class="input" id="param-rel-score" value="0.4" step="0.05" min="0" max="1" />
+            </div>
+          </div>
+
+          <div class="params-switches">
+            <div style="display:flex;gap:24px;flex-wrap:wrap;">
+              <label class="checkbox-row">
+                <input type="checkbox" id="param-strict" onchange="updateParamsSummaryLabel()" />
+                <span>严格阈值模式 (<code>--strict</code>，仅过阈值候选，不自动补齐)</span>
+              </label>
+              <label class="checkbox-row">
+                <input type="checkbox" id="param-allow-unknown" onchange="updateParamsSummaryLabel()" />
+                <span>允许职称不明候选 (<code>--allow-unknown-title</code>)</span>
+              </label>
+            </div>
+            <button class="btn btn-sm" onclick="resetMatchParams()">恢复默认参数</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 匹配结果预览卡片 -->
+      <div class="card">
+        <div class="card-header">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div class="card-title">匹配结果预览</div>
+            <div class="summary-pills" id="match-stats-bar" style="display:none;">
+              <span class="stat-pill">学生 <strong id="stat-stu-count">0</strong> 人</span>
+              <span class="stat-pill">满额 <strong id="stat-full-count">0</strong></span>
+              <span class="stat-pill">涉及导师 <strong id="stat-rev-count">0</strong> 位</span>
+              <span class="stat-pill">耗时 <strong id="stat-elapsed">0s</strong></span>
+            </div>
+            <span style="font-size:12.5px;color:var(--ink-muted);" id="match-summary-text"></span>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-sm" id="btn-toggle-view" onclick="togglePreviewMode()" disabled>
+              视图：合并单元格 ⇄ 横式单行
+            </button>
+            <button class="btn btn-soft btn-sm" id="btn-export-csv" onclick="exportMatchedResult('csv')" disabled>
+              导出横式 CSV（含匹配方向与相近程度）
+            </button>
+            <button class="btn btn-primary btn-sm" id="btn-export-xlsx" onclick="exportMatchedResult('xlsx')" disabled>
+              导出原表格式 .xlsx（带合并单元格）
+            </button>
+          </div>
+        </div>
+
+        <!-- 固定内嵌表格（无任何内部横向或纵向滚动条） -->
+        <div class="table-wrap" id="match-preview-wrap">
+          <div style="padding:48px 24px;text-align:center;color:var(--ink-muted);">
+            <div style="font-size:14px;color:var(--ink-secondary);margin-bottom:4px;">上传课题表后即可在此分页预览匹配详情</div>
+            <div style="font-size:12.5px;">也可点击上方「载入示例表」直接查看匹配效果（鼠标悬停任意省略单元格可查看完整内容）</div>
+          </div>
+        </div>
+
+        <!-- 匹配预览点击翻页栏 -->
+        <div class="pagination-bar" id="match-pagination-bar" style="display:none;">
+          <div id="match-page-info">共 0 名学生</div>
+          <div class="page-btn-group" id="match-page-btns"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== 页面 2：数据库查看、检索与维护页面 ==================== -->
+    <section id="page-db" class="page-view">
+      <div class="stats-bar">
+        <div class="stat-card">
+          <div class="stat-label">教师库总人数</div>
+          <div class="stat-value" id="db-stat-total">-</div>
+          <div class="stat-sub">本地 SQLite 数据库</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">院系覆盖率</div>
+          <div class="stat-value" id="db-stat-dept">-</div>
+          <div class="stat-sub" id="db-stat-dept-sub">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">研究方向覆盖率</div>
+          <div class="stat-value" id="db-stat-rd">-</div>
+          <div class="stat-sub" id="db-stat-rd-sub">-</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">邮箱覆盖率</div>
+          <div class="stat-value" id="db-stat-email">-</div>
+          <div class="stat-sub" id="db-stat-email-sub">-</div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+        <div class="subtabs">
+          <button class="nav-btn active" id="subtab-btn-browse" onclick="switchDbSubtab('browse')">
+            检索与人工维护
+          </button>
+          <button class="nav-btn" id="subtab-btn-merge" onclick="switchDbSubtab('merge')">
+            增量合并 & 脚本爬取
+          </button>
+          <button class="nav-btn" id="subtab-btn-colleges" onclick="switchDbSubtab('colleges')">
+            各院系分布
+          </button>
+        </div>
+
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-primary btn-sm" onclick="openFacultyModal(null)">+ 新增教师</button>
+          <a class="btn btn-sm" href="/api/db/export_csv" download>导出全库 CSV</a>
+        </div>
+      </div>
+
+      <!-- 子视图 A：检索与人工维护（固定单元格高度、无内部滑条、固定表头、点击翻页） -->
+      <div id="db-subview-browse">
+        <div class="card">
+          <div class="db-filter-grid">
+            <input type="text" class="input" id="db-q-keyword" placeholder="搜索姓名 / 邮箱 / 方向 / 电话..." onkeydown="if(event.key==='Enter')loadFacultyList(1)" />
+            <input type="text" class="input" id="db-q-dept" list="college-options-datalist" placeholder="院系筛选（如：电子信息 / 法学院）" onkeydown="if(event.key==='Enter')loadFacultyList(1)" />
+            <input type="text" class="input" id="db-q-title" placeholder="职称筛选（如：副教授 / 副研究员）" onkeydown="if(event.key==='Enter')loadFacultyList(1)" />
+            <input type="text" class="input" id="db-q-research" placeholder="研究方向关键词..." onkeydown="if(event.key==='Enter')loadFacultyList(1)" />
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
+            <div style="display:flex;gap:20px;flex-wrap:wrap;">
+              <label class="checkbox-row">
+                <input type="checkbox" id="db-q-nosenior" onchange="loadFacultyList(1)" />
+                <span>排除正高级职称（仅看可参与盲审的导师）</span>
+              </label>
+              <label class="checkbox-row">
+                <input type="checkbox" id="db-q-hasrd" onchange="loadFacultyList(1)" />
+                <span>仅看含研究方向的教师</span>
+              </label>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-sm" onclick="resetDbFilters()">重置</button>
+              <button class="btn btn-primary btn-sm" onclick="loadFacultyList(1)">检索</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="fixed-table" id="db-faculty-table">
+              <colgroup>
+                <col style="width:6%;" />
+                <col style="width:9%;" />
+                <col style="width:12%;" />
+                <col style="width:17%;" />
+                <col style="width:18%;" />
+                <col style="width:27%;" />
+                <col style="width:11%;" />
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>序号/ID</th>
+                  <th>姓名</th>
+                  <th>职称</th>
+                  <th>院系（完整名称）</th>
+                  <th>邮箱 / 电话</th>
+                  <th>研究方向</th>
+                  <th style="text-align:center;">操作</th>
+                </tr>
+              </thead>
+              <tbody id="db-table-body">
+                <tr><td colspan="7" style="text-align:center;">正在加载...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="pagination-bar">
+            <div id="db-page-info">共 0 条</div>
+            <div class="page-btn-group" id="db-page-btns"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 子视图 B：外部表格增量合并 & 脚本爬取接口 -->
+      <div id="db-subview-merge" style="display:none;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));gap:20px;">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">外部教师表增量合并</div>
+              <div style="display:flex;gap:8px;">
+                <a class="text-link" href="/api/template?type=teacher&format=xlsx" download>下载 .xlsx 模板</a>
+                <a class="text-link" href="/api/template?type=teacher&format=csv" download>下载 .csv 模板</a>
+              </div>
+            </div>
+
+            <div class="upload-dropzone" onclick="document.getElementById('merge-file-input').click()" style="margin-bottom:14px;">
+              <input type="file" id="merge-file-input" accept=".xlsx,.csv" style="display:none" onchange="onMergeFileSelected(event)" />
+              <div class="upload-info">
+                <div class="upload-icon-circle">+</div>
+                <div style="min-width:0;">
+                  <div class="upload-title" id="merge-file-label">点击上传教师数据表或历史评审表 (.xlsx / .csv)</div>
+                  <div class="upload-hint">自动识别「姓名/拟定评审、职称、院系、邮箱、电话、研究方向」等列</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:14px;">
+              <label class="form-label">同名但院系缺失记录的处理方式</label>
+              <select class="select" id="merge-conflict-policy">
+                <option value="richer">自动合并（保留字段更丰富的版本，推荐）</option>
+                <option value="skip">保守跳过（不改动已有同名记录）</option>
+                <option value="add">作为新教师直接追加</option>
+              </select>
+            </div>
+
+            <div style="display:flex;gap:10px;">
+              <button class="btn btn-soft" style="flex:1;" onclick="runTeacherMerge(true)">
+                预览合并效果 (--dry-run)
+              </button>
+              <button class="btn btn-primary" style="flex:1;" onclick="runTeacherMerge(false)">
+                确认执行增量写入
+              </button>
+            </div>
+
+            <div id="merge-result-box" style="margin-top:14px;display:none;"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">脚本爬取与数据补全接口</div>
+              <button class="btn btn-sm" onclick="refreshScriptTasks()">刷新日志</button>
+            </div>
+
+            <div style="display:grid;gap:10px;margin-bottom:14px;">
+              <div style="padding:12px 14px;border:1px solid var(--border-light);border-radius:var(--radius-md);background:var(--bg-warm-tint);">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <div style="font-weight:600;">1. 教师基本信息爬取 (<code>sjtu_faculty_scraper.py</code>)</div>
+                    <div style="font-size:12px;color:var(--ink-muted);">获取全校 61 个院系教师基本信息</div>
+                  </div>
+                  <button class="btn btn-primary btn-sm" onclick="triggerScript('scraper')">运行</button>
+                </div>
+                <div style="display:flex;gap:18px;margin-top:6px;flex-wrap:wrap;">
+                  <label class="checkbox-row">
+                    <input type="checkbox" id="scr-opt-force" />
+                    <span>覆盖已有记录 (<code>--force</code>)</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input type="checkbox" id="scr-opt-research" />
+                    <span>同步爬研究方向 (<code>--with-research</code>)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div style="padding:12px 14px;border:1px solid var(--border-light);border-radius:var(--radius-md);background:var(--bg-warm-tint);">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <div style="font-weight:600;">2. 研究方向增量爬取 (<code>sjtu_scrape_research.py</code>)</div>
+                    <div style="font-size:12px;color:var(--ink-muted);">8 线程并发解析教师个人主页研究方向与简介</div>
+                  </div>
+                  <button class="btn btn-primary btn-sm" onclick="triggerScript('research')">运行</button>
+                </div>
+                <div style="margin-top:6px;">
+                  <label class="checkbox-row">
+                    <input type="checkbox" id="res-opt-force" />
+                    <span>全量重爬覆盖已有方向 (<code>--force</code>，默认仅增量填空)</span>
+                  </label>
+                </div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                <div style="padding:10px 14px;border:1px solid var(--border-light);border-radius:var(--radius-md);background:var(--bg-warm-tint);display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <div style="font-weight:600;">主页补扫院系</div>
+                    <div style="font-size:11.5px;color:var(--ink-muted);"><code>sjtu_fix_college.py</code></div>
+                  </div>
+                  <button class="btn btn-sm" onclick="triggerScript('fix_college')">运行</button>
+                </div>
+                <div style="padding:10px 14px;border:1px solid var(--border-light);border-radius:var(--radius-md);background:var(--bg-warm-tint);display:flex;justify-content:space-between;align-items:center;">
+                  <div>
+                    <div style="font-weight:600;">网络搜索补院系</div>
+                    <div style="font-size:11.5px;color:var(--ink-muted);"><code>sjtu_web_fix_college.py</code></div>
+                  </div>
+                  <button class="btn btn-sm" onclick="triggerScript('web_fix_college')">运行</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="terminal-log" id="script-log-box">尚无正在运行或已执行的后台脚本任务。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 子视图 C：各院系教师统计（按字典序排列） -->
+      <div id="db-subview-colleges" style="display:none;">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">各院系教师分布（按院系字典序排列 · 点击院系可筛选查看）</div>
+          </div>
+          <div id="college-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- 右下角轻量版本与版权信息 -->
+  <footer class="corner-copyright">
+    <span class="kotone-star" aria-hidden="true">✦</span> TaroDeluxe · Codex &amp; SJTU ZhuXueBu &amp; CTP
+  </footer>
+
+  <!-- ==================== 弹窗 1：带左侧目录 (TOC) 的 README / ARCHITECTURE 阅读器 ==================== -->
+  <div class="modal-backdrop" id="doc-modal" onclick="if(event.target===this)closeDocModal()">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title" id="doc-modal-title">文档</div>
+        <button class="btn btn-sm" onclick="closeDocModal()">关闭</button>
+      </div>
+      <div class="doc-modal-layout">
+        <aside class="doc-toc-sidebar">
+          <div class="doc-toc-title">目录导航</div>
+          <div id="doc-modal-toc"></div>
+        </aside>
+        <div class="doc-content-pane" id="doc-content-pane">
+          <div class="markdown-viewer" id="doc-modal-content">正在加载...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 弹窗 2：新增 / 编辑教师信息（仅底部1个取消按钮、紧凑姓名/职称框、院系候选与新院系警告） ==================== -->
+  <div class="modal-backdrop" id="faculty-modal" onclick="if(event.target===this)closeFacultyModal()">
+    <div class="modal-dialog" style="max-width:540px;height:auto;max-height:86vh;">
+      <div class="modal-header">
+        <div class="modal-title" id="faculty-modal-title">维护教师信息</div>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="edit-faculty-id" />
+
+        <!-- 紧凑姓名与职称框（宽度刚好容纳最长名字或职称） -->
+        <div class="faculty-compact-row">
+          <div class="form-group faculty-name-group">
+            <label class="form-label">教师姓名 *</label>
+            <input type="text" class="input" id="edit-faculty-name" placeholder="如：张三" />
+          </div>
+          <div class="form-group faculty-title-group">
+            <label class="form-label">职称</label>
+            <input type="text" class="input" id="edit-faculty-title" list="title-options-datalist" placeholder="如：长聘教轨副教授" />
+            <datalist id="title-options-datalist">
+              <option value="副教授"></option>
+              <option value="长聘教轨副教授"></option>
+              <option value="长聘副教授"></option>
+              <option value="副研究员"></option>
+              <option value="助理教授"></option>
+              <option value="长聘教轨助理教授"></option>
+              <option value="助理研究员"></option>
+              <option value="讲师"></option>
+              <option value="高级工程师"></option>
+              <option value="高级实验师"></option>
+              <option value="工程师"></option>
+              <option value="教授"></option>
+              <option value="研究员"></option>
+            </datalist>
+          </div>
+        </div>
+
+        <!-- 院系选择框：点击弹出库内可选院系名称，输入新院系时实时弹出警告提示 -->
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label">所在院系（可从下拉列表选择已有院系，自动去除“上海交通大学”前缀）</label>
+          <input
+            type="text"
+            class="input"
+            id="edit-faculty-dept"
+            list="college-options-datalist"
+            placeholder="点击选择或输入院系，如：电子信息与电气工程学院"
+            oninput="checkDepartmentInput()"
+            onchange="checkDepartmentInput()"
+          />
+          <datalist id="college-options-datalist"></datalist>
+          <div class="dept-warning-hint" id="edit-dept-warning"></div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">邮箱</label>
+            <input type="text" class="input" id="edit-faculty-email" placeholder="example@sjtu.edu.cn" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">办公电话 / 手机</label>
+            <input type="text" class="input" id="edit-faculty-phone" placeholder="021-3420xxxx 或手机号" />
+          </div>
+        </div>
+
+        <input type="hidden" id="edit-faculty-mobile" />
+
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label">个人主页 URL</label>
+          <input type="text" class="input" id="edit-faculty-url" placeholder="https://faculty.sjtu.edu.cn/..." />
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+          <label class="form-label">研究方向</label>
+          <textarea class="textarea" id="edit-faculty-rd" rows="3" placeholder="填写研究方向与领域关键词..."></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">个人简介 (选填)</label>
+          <textarea class="textarea" id="edit-faculty-profile" rows="2" placeholder="补充个人学术简介..."></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px;">
+          <button class="btn" onclick="closeFacultyModal()">取消</button>
+          <button class="btn btn-primary" onclick="saveFacultyRecord()">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
