@@ -11,6 +11,13 @@ $view=$database.OpenView('SELECT `Property` FROM `Control` WHERE `Dialog_`=''Sto
 $view.Execute();$record=$view.Fetch()
 if (!$record -or $record.StringData(1) -ne 'JZDATADIR') { throw 'Installer is missing its storage selection field' }
 $view.Close()
+$view=$database.OpenView('SELECT `Text` FROM `Control` WHERE `Dialog_`=''StorageSetupDlg'' AND `Control`=''Artwork''')
+$view.Execute();$record=$view.Fetch()
+if (!$record -or $record.StringData(1) -ne 'InstallerArtwork') { throw 'Installer artwork is missing from the setup page' }
+$view.Close()
+$view=$database.OpenView('SELECT `Name` FROM `Binary` WHERE `Name`=''InstallerArtwork''')
+$view.Execute();if (!$view.Fetch()) { throw 'Installer artwork is not embedded in MSI' };$view.Close()
+
 $installed=$false
 try {
   $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$msiPath+'"'),'/qn','/norestart',('INSTALLFOLDER="'+$app+'"'),('JZDATADIR="'+$data+'"'),'/L*v',('"'+(Join-Path $root 'install.log')+'"')) -Wait -PassThru
@@ -19,7 +26,7 @@ try {
   $exe=Join-Path $app 'JunZhengMatch.exe'
   if (!(Test-Path $exe)) { throw 'Installed EXE is missing' }
   $config=Get-Content (Join-Path $env:USERPROFILE 'JunZhenMatch/preferences.json') | ConvertFrom-Json
-  if ([IO.Path]::GetFullPath($config.data_dir).TrimEnd('\') -ne [IO.Path]::GetFullPath($data).TrimEnd('\')) { throw 'Installer did not save the selected data directory' }
+  if ([IO.Path]::GetFullPath($config.data_dir).TrimEnd('\') -ne [IO.Path]::GetFullPath($data).TrimEnd('\')) { throw "Installer data directory mismatch. Expected: $data; actual: $($config.data_dir)" }
   $shell=New-Object -ComObject WScript.Shell
   $shortcutPath=Join-Path ([Environment]::GetFolderPath('Programs')) 'JunZhenMatch/䇹政导师匹配.lnk'
   if (!(Test-Path $shortcutPath)) { throw 'Start menu shortcut is missing' }
@@ -34,8 +41,10 @@ try {
   $installed=$false
   if (!(Test-Path (Join-Path $data 'user-data-marker.txt'))) { throw 'Uninstall removed user data' }
   if (Test-Path $exe) { throw 'Uninstall did not remove program files' }
-  @{status='ok';storage_selection=$true;native_shortcut=$true;installed_runtime=$true;uninstall_preserves_data=$true} | ConvertTo-Json | Set-Content -Encoding utf8 $Report
+  @{status='ok';storage_selection=$true;embedded_artwork=$true;native_shortcut=$true;installed_runtime=$true;uninstall_preserves_data=$true} | ConvertTo-Json | Set-Content -Encoding utf8 $Report
 }
 finally {
+  New-Item -ItemType Directory -Force installer-diagnostics | Out-Null
+  Copy-Item (Join-Path $root '*.log') installer-diagnostics/ -ErrorAction SilentlyContinue
   if ($installed) { Start-Process msiexec.exe -ArgumentList @('/x',('"'+$msiPath+'"'),'/qn','/norestart') -Wait | Out-Null }
 }

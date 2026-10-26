@@ -3,36 +3,58 @@
     <MajorUpgrade DowngradeErrorMessage="已安装更新版本，请先卸载再安装旧版。" />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="AppIcon" SourceFile="$(var.IconPath)" />
+    <Binary Id="InstallerArtwork" SourceFile="assets/installer-art.bmp" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch" />
-    <Property Id="JZDATADIR" Secure="yes"><RegistrySearch Id="ExistingDataDir" Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="DataDir" Type="raw" /></Property>
-    <SetProperty Id="JZDATADIR" Value="[%USERPROFILE]\JunZhenMatch" Before="CostInitialize" Sequence="both" Condition="NOT JZDATADIR" />
-    <StandardDirectory Id="LocalAppDataFolder"><Directory Id="ProgramsFolder" Name="Programs"><Directory Id="INSTALLFOLDER" Name="JunZhenMatch">
-      <Component Id="AppFiles" Guid="F833CD4F-49D1-4216-B2F3-3222CF2A21E7">
-        <File Id="MainExe" Source="$(var.AppPath)" />
-        <File Id="WebviewBootstrapper" Source="$(var.BootstrapperPath)" />
-        <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstalledVersion" Type="string" Value="$(var.Version)" KeyPath="yes" />
-        <RemoveFolder Id="RemoveAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
-        <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsFolder" On="uninstall" />
+    <Property Id="JZDATADIR" Secure="yes" />
+    <Property Id="PREVIOUSJZDATADIR">
+      <RegistrySearch Id="ExistingDataDir" Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="DataDir" Type="raw" />
+    </Property>
+    <SetProperty Id="JZDATADIR" Action="UsePreviousDataDir" Value="[PREVIOUSJZDATADIR]" Before="UseDefaultDataDir" Sequence="both" Condition="NOT JZDATADIR AND PREVIOUSJZDATADIR" />
+    <SetProperty Id="JZDATADIR" Action="UseDefaultDataDir" Value="[%USERPROFILE]\JunZhenMatch" Before="CostInitialize" Sequence="both" Condition="NOT JZDATADIR" />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="JunZhenMatch">
+          <Component Id="AppFiles" Guid="F833CD4F-49D1-4216-B2F3-3222CF2A21E7">
+            <File Id="MainExe" Source="$(var.AppPath)" />
+            <File Id="WebviewBootstrapper" Source="$(var.BootstrapperPath)" />
+            <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstalledVersion" Type="string" Value="$(var.Version)" KeyPath="yes" />
+            <RemoveFolder Id="RemoveAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
+            <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsFolder" On="uninstall" />
+          </Component>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="MenuFolder" Name="JunZhenMatch">
+        <Component Id="MenuShortcut" Guid="8569805A-A26A-43A5-B622-BAB217BB11CC">
+          <Shortcut Id="LaunchDesktop" Name="䇹政导师匹配" Target="[#MainExe]" Arguments="--desktop" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+          <RemoveFolder Id="RemoveMenuFolder" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="MenuInstalled" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder">
+      <Component Id="DesktopShortcut" Guid="D08DE7C3-C6BD-43F7-A020-CFDE9AD81D01">
+        <Shortcut Id="DesktopLaunch" Name="䇹政导师匹配" Target="[#MainExe]" Arguments="--desktop" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+        <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="DesktopInstalled" Type="integer" Value="1" KeyPath="yes" />
       </Component>
-    </Directory></Directory></StandardDirectory>
-    <StandardDirectory Id="ProgramMenuFolder"><Directory Id="MenuFolder" Name="JunZhenMatch"><Component Id="MenuShortcut" Guid="8569805A-A26A-43A5-B622-BAB217BB11CC">
-      <Shortcut Id="LaunchDesktop" Name="䇹政导师匹配" Target="[#MainExe]" Arguments="--desktop" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
-      <RemoveFolder Id="RemoveMenuFolder" On="uninstall" />
-      <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="MenuInstalled" Type="integer" Value="1" KeyPath="yes" />
-    </Component></Directory></StandardDirectory>
-    <StandardDirectory Id="DesktopFolder"><Component Id="DesktopShortcut" Guid="D08DE7C3-C6BD-43F7-A020-CFDE9AD81D01">
-      <Shortcut Id="DesktopLaunch" Name="䇹政导师匹配" Target="[#MainExe]" Arguments="--desktop" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
-      <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="DesktopInstalled" Type="integer" Value="1" KeyPath="yes" />
-    </Component></StandardDirectory>
-    <Feature Id="Complete" Title="JunZhenMatch" Level="1"><ComponentRef Id="AppFiles" /><ComponentRef Id="MenuShortcut" /><ComponentRef Id="DesktopShortcut" /></Feature>
-    <CustomAction Id="ConfigureStorage" FileRef="MainExe" ExeCommand='--configure-data "[JZDATADIR]\." --ensure-webview2 --no-open' Execute="deferred" Impersonate="yes" Return="check" />
-    <InstallExecuteSequence><Custom Action="ConfigureStorage" Before="InstallFinalize" Condition="NOT REMOVE~=&quot;ALL&quot;" /></InstallExecuteSequence>
+    </StandardDirectory>
+    <Feature Id="Complete" Title="JunZhenMatch" Level="1">
+      <ComponentRef Id="AppFiles" />
+      <ComponentRef Id="MenuShortcut" />
+      <ComponentRef Id="DesktopShortcut" />
+    </Feature>
+    <CustomAction Id="ConfigureStorage" FileRef="MainExe" ExeCommand="--configure-data &quot;[JZDATADIR]\.&quot; --ensure-webview2 --no-open" Execute="deferred" Impersonate="yes" Return="check" />
+    <InstallExecuteSequence>
+      <Custom Action="ConfigureStorage" Before="InstallFinalize" Condition="NOT REMOVE~=&quot;ALL&quot;" />
+    </InstallExecuteSequence>
     <UI>
       <TextStyle Id="DefaultFont" FaceName="Microsoft YaHei UI" Size="9" />
       <TextStyle Id="TitleFont" FaceName="Microsoft YaHei UI" Size="15" Bold="yes" />
       <Property Id="DefaultUIFont" Value="DefaultFont" />
-      <Dialog Id="StorageSetupDlg" Width="420" Height="285" Title="JunZhenMatch 安装">
+      <Dialog Id="StorageSetupDlg" Width="640" Height="342" Title="JunZhenMatch 安装" NoMinimize="yes">
+        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
         <Control Id="Title" Type="Text" X="20" Y="18" Width="380" Height="30" Text="{\TitleFont}䇹政导师匹配" />
         <Control Id="Intro" Type="Text" X="20" Y="55" Width="380" Height="30" Text="安装后以独立窗口运行。程序与数据分开存放，升级或卸载默认保留教师数据。" />
         <Control Id="ProgramLabel" Type="Text" X="20" Y="98" Width="380" Height="17" Text="程序安装位置：" />
@@ -40,28 +62,40 @@
         <Control Id="DataLabel" Type="Text" X="20" Y="153" Width="380" Height="17" Text="数据存储位置（不存在时自动创建）：" />
         <Control Id="DataPath" Type="Edit" X="20" Y="173" Width="380" Height="20" Property="JZDATADIR" />
         <Control Id="Hint" Type="Text" X="20" Y="203" Width="380" Height="27" Text="可输入其他文件夹的完整路径。安装后也可在“偏好设置”中迁移数据。缺少WebView2环境时将联网安装。" />
-        <Control Id="Install" Type="PushButton" X="245" Y="248" Width="75" Height="22" Default="yes" Text="安装">
+        <Control Id="Install" Type="PushButton" X="245" Y="300" Width="75" Height="22" Default="yes" Text="安装">
           <Publish Event="SetTargetPath" Value="INSTALLFOLDER" Condition="1" />
           <Publish Event="EndDialog" Value="Return" Condition="JZDATADIR" />
         </Control>
-        <Control Id="Cancel" Type="PushButton" X="327" Y="248" Width="73" Height="22" Cancel="yes" Text="取消"><Publish Event="EndDialog" Value="Exit" /></Control>
+        <Control Id="Cancel" Type="PushButton" X="327" Y="300" Width="73" Height="22" Cancel="yes" Text="取消">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
       </Dialog>
-      <Dialog Id="ProgressDlg" Width="420" Height="170" Title="正在安装" Modeless="yes">
-        <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="20" Width="380" Height="25" Text="正在安装 JunZhenMatch…" />
-        <Control Id="ActionText" Type="Text" X="20" Y="60" Width="380" Height="20" Text="[ActionText]" />
-        <Control Id="Progress" Type="ProgressBar" X="20" Y="90" Width="380" Height="15" ProgressBlocks="yes" />
+      <Dialog Id="ProgressDlg" Width="640" Height="342" Title="正在安装" Modeless="yes" NoMinimize="yes">
+        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="42" Width="380" Height="25" Text="正在安装 JunZhenMatch…" />
+        <Control Id="ActionText" Type="Text" X="20" Y="108" Width="380" Height="20" Text="[ActionText]" />
+        <Control Id="Progress" Type="ProgressBar" X="20" Y="145" Width="380" Height="15" ProgressBlocks="yes" />
       </Dialog>
-      <Dialog Id="ExitDialog" Width="420" Height="165" Title="安装完成">
-        <Control Id="Message" Type="Text" X="20" Y="25" Width="380" Height="70" Text="安装已完成。请从桌面或开始菜单启动“䇹政导师匹配”。关闭窗口只关闭界面，彻底退出请使用右上角“退出程序”。" />
-        <Control Id="Finish" Type="PushButton" X="325" Y="120" Width="75" Height="22" Default="yes" Cancel="yes" Text="完成"><Publish Event="EndDialog" Value="Return" /></Control>
+      <Dialog Id="ExitDialog" Width="640" Height="342" Title="安装完成" NoMinimize="yes">
+        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="100" Text="安装已完成。请从桌面或开始菜单启动“䇹政导师匹配”。关闭窗口只关闭界面，彻底退出请使用右上角“退出程序”。" />
+        <Control Id="Finish" Type="PushButton" X="325" Y="300" Width="75" Height="22" Default="yes" Cancel="yes" Text="完成">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
       </Dialog>
-      <Dialog Id="FatalError" Width="420" Height="165" Title="安装失败">
-        <Control Id="Message" Type="Text" X="20" Y="25" Width="380" Height="70" Text="安装未完成。请检查文件夹权限和网络后重试；可查看安装日志了解原因。" />
-        <Control Id="Finish" Type="PushButton" X="325" Y="120" Width="75" Height="22" Default="yes" Cancel="yes" Text="关闭"><Publish Event="EndDialog" Value="Exit" /></Control>
+      <Dialog Id="FatalError" Width="640" Height="342" Title="安装失败" NoMinimize="yes">
+        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="100" Text="安装未完成。请检查文件夹权限和网络后重试；可查看安装日志了解原因。" />
+        <Control Id="Finish" Type="PushButton" X="325" Y="300" Width="75" Height="22" Default="yes" Cancel="yes" Text="关闭">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
       </Dialog>
-      <Dialog Id="UserExit" Width="420" Height="165" Title="安装已取消">
-        <Control Id="Message" Type="Text" X="20" Y="25" Width="380" Height="60" Text="安装已取消。" />
-        <Control Id="Finish" Type="PushButton" X="325" Y="120" Width="75" Height="22" Default="yes" Cancel="yes" Text="关闭"><Publish Event="EndDialog" Value="Exit" /></Control>
+      <Dialog Id="UserExit" Width="640" Height="342" Title="安装已取消" NoMinimize="yes">
+        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="100" Text="安装已取消。" />
+        <Control Id="Finish" Type="PushButton" X="325" Y="300" Width="75" Height="22" Default="yes" Cancel="yes" Text="关闭">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
       </Dialog>
     </UI>
     <InstallUISequence>

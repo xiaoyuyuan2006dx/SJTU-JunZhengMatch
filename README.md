@@ -113,7 +113,7 @@ JZ_PASSWORD='替换为至少12字符的密码' docker compose up -d --build
 
 ## 调整背景和动画
 
-修改 `src/junzheng_match/web/theme.css` 中“可调视觉参数”下的变量，保存后刷新页面：
+源码运行时，修改 `src/junzheng_match/web/theme.css` 中“可调视觉参数”下的变量，保存后刷新页面即可；EXE和MSI中的资源需重新编译后生效：
 
 | 变量 | 当前值 | 作用 |
 |---|---|---|

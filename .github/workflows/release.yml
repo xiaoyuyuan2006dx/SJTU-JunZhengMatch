@@ -108,6 +108,7 @@ jobs:
           path: |
             *-test.json
             dist/*.wixpdb
+            installer-diagnostics/*.log
   docker:
     needs: test
     runs-on: ubuntu-latest
