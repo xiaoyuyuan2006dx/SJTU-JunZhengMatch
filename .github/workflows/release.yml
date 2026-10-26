@@ -78,7 +78,8 @@ jobs:
         shell: pwsh
         run: |
           dotnet tool install --global wix --version 5.0.2
-          wix build packaging/windows/installer.wxs -arch x64 -d "Version=$env:APP_VERSION" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "BootstrapperPath=$((Resolve-Path dist/MicrosoftEdgeWebview2Setup.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -sice ICE20 -o "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi"
+          wix build packaging/windows/installer.wxs -arch x64 -d "Version=$env:APP_VERSION" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "BootstrapperPath=$((Resolve-Path dist/MicrosoftEdgeWebview2Setup.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -o "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi"
+          wix msi validate "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -sice ICE20
       - name: Install, verify and uninstall MSI
         shell: pwsh
         run: ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -Report installer-test.json
