@@ -761,8 +761,8 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
             if path in ("/", "/index.html"):
                 content = (FRONTEND_DIR / "index.html").read_bytes()
                 return self._send_bytes(content, "text/html; charset=utf-8")
-            if path == "/frontend/kotone-mascot.jpg":
-                return self._send_bytes((FRONTEND_DIR / "kotone-mascot.jpg").read_bytes(), "image/jpeg")
+            if path == "/frontend/kotone-mascot.png":
+                return self._send_bytes((FRONTEND_DIR / "kotone-mascot.png").read_bytes(), "image/png")
             if path == "/theme.css":
                 content = (FRONTEND_DIR / "theme.css").read_bytes()
                 return self._send_bytes(content, "text/css; charset=utf-8")
