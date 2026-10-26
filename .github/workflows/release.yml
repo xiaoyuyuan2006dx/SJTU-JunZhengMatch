@@ -26,7 +26,7 @@ jobs:
           python-version: '3.12'
       - id: version
         env:
-          RELEASE_VERSION: ${{ inputs.release_version || (github.ref_type == 'tag' && github.ref_name) }}
+          RELEASE_VERSION: ${{ inputs.release_version || (github.ref_type == 'tag' && github.ref_name) || '' }}
         run: python tools/build_version.py --version "${RELEASE_VERSION:-}"
       - run: pip install -r packaging/requirements-dev.txt
       - run: python tools/run_tests.py --report tests-report.json
