@@ -47,7 +47,9 @@ class ServiceSettings:
             target=Path(body.get('data_dir') or a.DATA_DIR).expanduser().resolve()
             if target!=a.DATA_DIR:
                 if os.getenv('JZ_MANAGED_DATA'):raise ValueError('Docker数据路径由挂载设置指定。')
-                self.migrate(target,body.get('migration','copy'))
+                mode=body.get('migration','auto')
+                if mode=='auto':mode='existing' if (target/'sjtu_faculty_data.db').exists() else 'copy'
+                self.migrate(target,mode)
             a.PREFERENCES.write(dict(data_dir=str(a.DATA_DIR),storage_confirmed=True,match_defaults=defaults,retain_uploads=retain))
             return self.get()
     def migrate(self,target,mode):

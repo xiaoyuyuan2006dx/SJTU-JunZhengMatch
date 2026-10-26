@@ -40,7 +40,7 @@ def verify(executable=None):
                             details=error_log.read_text(errors='replace') if error_log.exists() else ''
                             raise RuntimeError('Application failed to start: '+details+(Path(directory)/'process.log').read_text(errors='replace'))
                         time.sleep(.25)
-                for path in ['/','/app.js','/theme.css','/frontend/kotone-mascot.png']:
+                for path in ['/','/app.js','/theme.css','/frontend/kotone-mascot.png','/frontend/kotone-portrait.jpg','/frontend/kotone-scene.png','/frontend/kotone-exit.png']:
                     body,_=request(path);assert body,path
                 for name in ('README','ARCHITECTURE'):
                     body,_=request('/api/docs?name='+name);assert json.loads(body)['content'].startswith('#')

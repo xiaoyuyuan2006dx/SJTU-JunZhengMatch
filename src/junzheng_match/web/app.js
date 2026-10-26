@@ -85,11 +85,11 @@ function applyDatabaseWidths() {
     {width:fittedWidth("序号/ID",["#99999"],{mono:true})},
     {width:Math.min(100,fittedWidth("姓名",rows.map(r=>r.name),{bold:true,extra:15}))},
     {width:Math.min(112,fittedWidth("职称",rows.map(r=>r.title),{extra:18}))},
-    {width:180},
-    {width:fittedWidth("邮箱 / 电话",rows.map(r=>r.email||r.phone||r.mobile||"-"))},
-    {min:340,weight:1}, {width:114}
+    {width:140},
+    {width:Math.min(220,fittedWidth("邮箱 / 电话",rows.map(r=>r.email||r.phone||r.mobile||"-")))},
+    {min:340,weight:1}, {width:100}
   ];
-  const fitted=fittedColumns(specs,table.parentElement.clientWidth);
+  const fitted=fittedColumns(specs,table.parentElement.clientWidth,true);
   table.querySelector("colgroup").innerHTML=fitted.html;table.style.width=`${fitted.width}px`;
 }
 let dbLayoutSamples=[];
@@ -115,6 +115,7 @@ function switchPage(pageKey) {
     document.getElementById("page-match").classList.add("active");
     document.getElementById("nav-match").classList.add("active");
   }
+  refreshSlidingTabs();
 }
 
 function switchDbSubtab(subKey) {
@@ -133,6 +134,7 @@ function switchDbSubtab(subKey) {
   if (subKey === "merge") {
     refreshScriptTasks();
   }
+  refreshSlidingTabs();
 }
 
 function toggleParamsDrawer() {
@@ -142,22 +144,8 @@ function toggleParamsDrawer() {
 }
 
 function updateParamsSummaryLabel() {
-  const drawer = document.getElementById("params-drawer");
-  const isOpen = drawer && drawer.classList.contains("open");
-  const pick = document.getElementById("param-pick").value || "3";
-  const pool = document.getElementById("param-pool").value || "20";
-  const strategy = document.getElementById("param-strategy").value === "weighted" ? "加权抽样" : "排名优先";
-  const strict = document.getElementById("param-strict").checked ? "严格阈值" : "自动补齐";
-  const mode = document.getElementById("param-filter-mode").value;
-  const val = document.getElementById("param-filter-value").value.trim();
-  let filterDesc = "全部学生";
-  if (mode === "range" && val) filterDesc = `序号 ${val}`;
-  if (mode === "student" && val) filterDesc = `第 ${val} 号`;
-  if (mode === "name" && val) filterDesc = `姓名含「${val}」`;
-
-  const arrow = isOpen ? "▴" : "▾";
-  document.getElementById("params-summary-label").textContent =
-    `⚙️ 匹配参数设置（${filterDesc} · 每人 ${pick} 位 · 每位导师最多 ${document.getElementById("param-max-uses").value||2} 次 · 候选池 ${pool} · ${strategy} · ${strict}）${arrow}`;
+  const isOpen=document.getElementById('params-drawer').classList.contains('open');
+  document.getElementById('params-summary-label').textContent=`匹配参数 ${isOpen?'▴':'▾'}`;
 }
 
 function escapeHtml(str) {
@@ -170,7 +158,7 @@ function escapeHtml(str) {
 }
 
 // ==================== 顶部 README & ARCHITECTURE 查看器（带左侧 TOC 目录） ====================
-async function openDocModal(docName) {
+async function openDocModal(docName, section = "") {
   const modal = document.getElementById("doc-modal");
   const titleEl = document.getElementById("doc-modal-title");
   const contentEl = document.getElementById("doc-modal-content");
@@ -195,6 +183,7 @@ async function openDocModal(docName) {
     }
     const pane = document.getElementById("doc-content-pane");
     if (pane) pane.scrollTop = 0;
+    if(section){const heading=rendered.toc.find(item=>item.text===section);if(heading)requestAnimationFrame(()=>scrollToDocHeading(heading.id));}
   } catch (err) {
     contentEl.innerHTML = `<div style="color:#c2410c;">加载失败: ${escapeHtml(err.message)}</div>`;
   }
@@ -202,8 +191,9 @@ async function openDocModal(docName) {
 
 function scrollToDocHeading(id) {
   const el = document.getElementById(id);
-  if (el) {
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
+  const pane = document.getElementById('doc-content-pane');
+  if (el && pane) {
+    pane.scrollTo({top:pane.scrollTop+el.getBoundingClientRect().top-pane.getBoundingClientRect().top-20,behavior:'instant'});
   }
 }
 
@@ -248,7 +238,8 @@ function renderMarkdownWithToc(md) {
   function formatInline(s) {
     return escapeHtml(s)
       .replace(/`([^`]+)`/g, "<code>$1</code>")
-      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\[([^\]]+)\]\((https:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
   }
 
   for (const rawLine of lines) {
@@ -356,6 +347,7 @@ function resetMatchParams() {
   document.getElementById("param-filter-mode").value = "all";
   document.getElementById("param-filter-value").value = "";
   document.getElementById("param-pick").value = "3";
+  document.getElementById("param-max-uses").value = "2";
   document.getElementById("param-pool").value = "20";
   document.getElementById("param-strategy").value = "top";
   document.getElementById("param-seed").value = "42";
@@ -437,6 +429,7 @@ async function runMatch(useSample = false) {
 
   const btn = document.getElementById("btn-run-match");
   const wrap = document.getElementById("match-preview-wrap");
+  document.getElementById("page-match").classList.remove("is-empty");
   btn.disabled = true;
   btn.textContent = "匹配计算中...";
   wrap.innerHTML = `<div style="padding:48px 20px;text-align:center;color:var(--ink-secondary);">正在运行 TF-IDF 学科扩展匹配引擎，请稍候...</div>`;
@@ -472,7 +465,7 @@ async function runMatch(useSample = false) {
     document.getElementById("match-pagination-bar").style.display = "none";
   } finally {
     btn.disabled = false;
-    btn.textContent = "开始匹配预览";
+    btn.textContent = "匹配预览";
   }
 }
 
@@ -1079,7 +1072,7 @@ let heartbeatTimer=null;
 const clientId=crypto.randomUUID();
 const desktopInterface=new URLSearchParams(location.search).get('interface')==='desktop';
 const preferenceFields=[
- ['max_teacher_uses','每位教师最多分配学生数','number',2],['pick_count','每人评审数','number',3],['pool_size','候选池大小','number',20],
+ ['max_teacher_uses','教师复用上限','number',2],['pick_count','每人评审数','number',3],['pool_size','候选池大小','number',20],
  ['strategy','选取策略','select','top'],['seed','随机种子','number',42],['min_score','最低相近分数','number',.05],['relative_score','相对分数阈值','number',.4],
  ['strict','严格阈值模式','checkbox',false],['allow_unknown_title','允许职称不明','checkbox',false]
 ];
@@ -1090,14 +1083,14 @@ async function appRequest(path,body){
 function populatePreferences(data){
  appPreferences=data;document.getElementById('pref-data-dir').value=data.data_dir;
  document.getElementById('pref-default-path').textContent=`默认位置：${data.default_data_dir}${data.managed_storage?' · 当前由Docker挂载管理':''}`;
- document.getElementById('pref-retain-uploads').checked=data.retain_uploads;
+
  document.getElementById('pref-data-dir').disabled=data.managed_storage;
  document.getElementById('pref-pick-dir').disabled=data.managed_storage;
  document.getElementById('pref-match-defaults').innerHTML=preferenceFields.map(([key,label,type,fallback])=>{
   const value=data.match_defaults[key]??fallback;
   const field=type==='select'?`<select id="pref-${key}" class="select"><option value="top" ${value==='top'?'selected':''}>排名优先</option><option value="weighted" ${value==='weighted'?'selected':''}>加权抽样</option></select>`:type==='checkbox'?`<input id="pref-${key}" type="checkbox" ${value?'checked':''}/>`:`<input id="pref-${key}" class="input" type="number" step="${['min_score','relative_score'].includes(key)?'.01':'1'}" value="${escapeHtml(value)}"/>`;
   return `<div class="form-group"><label for="pref-${key}" class="form-label">${label}</label>${field}</div>`;
- }).join('');
+ }).join('')+`<div class="form-group pref-save-cell"><button class="btn btn-primary btn-sm" id="pref-save" onclick="savePreferences()">保存设置</button></div>`;
 }
 function applyDefaults(data){
  const map={pick_count:'pick',pool_size:'pool',max_teacher_uses:'max-uses',strategy:'strategy',seed:'seed',min_score:'min-score',relative_score:'rel-score',strict:'strict',allow_unknown_title:'allow-unknown'};
@@ -1132,9 +1125,9 @@ async function savePreferences(){
  try{
   const defaults={};for(const [key,,type] of preferenceFields){const field=document.getElementById('pref-'+key);defaults[key]=type==='checkbox'?field.checked:type==='number'?Number(field.value):field.value;}
   const path=document.getElementById('pref-data-dir').value.trim();
-  if(path!==appPreferences.data_dir&&!confirm('更换数据目录会影响所有已打开界面。现有数据保留原位置副本，确认继续？'))return;
-  populatePreferences(await appRequest('/api/preferences',{data_dir:path,migration:document.getElementById('pref-migration').value,retain_uploads:document.getElementById('pref-retain-uploads').checked,match_defaults:defaults}));
-  applyDefaults(appPreferences);document.getElementById('pref-feedback').textContent='已保存。默认参数已应用到匹配页面。';loadDbStats();
+  if(path!==appPreferences.data_dir&&!confirm('切换存储位置将影响所有界面。目标已有教师库时将使用该库，否则迁移现有数据。原位置文件保留，是否继续？'))return;
+  populatePreferences(await appRequest('/api/preferences',{data_dir:path,migration:'auto',retain_uploads:false,match_defaults:defaults}));
+  applyDefaults(appPreferences);document.getElementById('pref-feedback').textContent='已保存';loadDbStats();
  }catch(error){document.getElementById('pref-feedback').textContent=error.message;}finally{button.disabled=false;}
 }
 async function openStorageFolder(kind){try{await appRequest('/api/preferences/open-folder',{kind});}catch(error){alert(error.message);}}
@@ -1149,7 +1142,7 @@ async function downloadAppFile(url,fallback){
 }
 async function restoreDatabase(event){
  const file=event.target.files?.[0];if(!file)return;
- if(!confirm('将恢复所选教师库。当前教师库会先备份，确认继续？'))return;
+ if(!confirm('导入数据将替换当前教师库，原库会自动备份。是否继续？'))return;
  try{const encoded=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});const result=await appRequest('/api/preferences/restore',{file_base64:encoded});document.getElementById('pref-feedback').textContent=result.message;await loadPreferences();loadDbStats();}
  catch(error){document.getElementById('pref-feedback').textContent=error.message;}finally{event.target.value='';}
 }
@@ -1170,3 +1163,23 @@ const tableContainerObserver=new ResizeObserver(entries=>{
  if(changed){clearTimeout(fitResizeTimer);fitResizeTimer=setTimeout(()=>{if(currentMatchData)renderMatchPreviewTable();applyDatabaseWidths();},100);}
 });
 for(const id of ['match-preview-wrap','db-faculty-table']){const element=document.getElementById(id);if(element)tableContainerObserver.observe(id==='db-faculty-table'?element.parentElement:element);}
+
+function refreshSlidingTabs(){
+ for(const group of document.querySelectorAll('.nav-pills,.db-action-tabs')){
+  const selected=group.querySelector('button.active');
+  if(!selected||!group.clientWidth||!selected.offsetWidth)continue;
+  group.classList.add('sliding-tabs');
+  for(const button of group.querySelectorAll('button'))button.setAttribute('aria-pressed',String(button===selected));
+  group.style.setProperty('--tab-x',selected.offsetLeft+'px');
+  group.style.setProperty('--tab-y',selected.offsetTop+'px');
+  group.style.setProperty('--tab-width',selected.offsetWidth+'px');
+  group.style.setProperty('--tab-height',selected.offsetHeight+'px');
+  if(!group.classList.contains('slider-ready'))requestAnimationFrame(()=>group.classList.add('slider-ready'));
+ }
+}
+window.addEventListener('DOMContentLoaded',()=>{
+ const observer=new ResizeObserver(refreshSlidingTabs);
+ for(const group of document.querySelectorAll('.nav-pills,.db-action-tabs'))observer.observe(group);
+ refreshSlidingTabs();document.fonts.ready.then(refreshSlidingTabs);
+});
+window.addEventListener('resize',refreshSlidingTabs);

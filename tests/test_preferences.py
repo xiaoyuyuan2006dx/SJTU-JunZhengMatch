@@ -37,10 +37,10 @@ class PreferencesTests(unittest.TestCase):
         original=self.app.DATA_DIR
         with self.assertRaisesRegex(ValueError,'已有教师库'):self.manager.save({'data_dir':str(target),'migration':'copy'})
         self.assertEqual(self.app.DATA_DIR,original)
-    def test_use_existing_target(self):
+    def test_auto_uses_existing_target(self):
         target=preferences.prepare_folder(self.root/'existing');shutil.copy2(paths.SEED_DB,target/'sjtu_faculty_data.db')
         with closing(sqlite3.connect(target/'sjtu_faculty_data.db')) as conn:conn.execute('DELETE FROM faculty');conn.commit()
-        self.manager.save({'data_dir':str(target),'migration':'existing'})
+        self.manager.save({'data_dir':str(target),'migration':'auto'})
         with closing(sqlite3.connect(self.app.DB_PATH)) as conn:self.assertEqual(conn.execute('SELECT COUNT(*) FROM faculty').fetchone()[0],0)
     def test_nested_data_directory_rejected(self):
         with self.assertRaisesRegex(ValueError,'互相包含'):self.manager.save({'data_dir':str(self.app.DATA_DIR/'nested')})

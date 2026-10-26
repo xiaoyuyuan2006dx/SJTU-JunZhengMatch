@@ -1079,3 +1079,132 @@ html, body {
 #pref-match-defaults label{display:block;margin-bottom:7px;}
 .pref-initial-path{padding:14px;border:1px solid var(--border-light);background:var(--bg-warm-tint);border-radius:8px;word-break:break-all;font-family:var(--font-mono);font-size:12px;}
 #pref-feedback{font-size:12px;color:var(--orange-deep-text);}
+
+/* 装饰层仅占两侧留白，工作区保持完整可操作。 */
+:root{--kotone-left:clamp(148px,13vw,260px);--kotone-right:clamp(224px,16vw,260px);}
+body{isolation:isolate;}
+.main-container{width:calc(100% - var(--kotone-left) - var(--kotone-right));max-width:1360px;padding:0;margin:22px var(--kotone-right) 64px var(--kotone-left);}
+/* 可调视觉参数：背景位置、清晰度、顶部过渡和小人不透明度。 */
+:root{
+  --scene-top:160px;
+  --scene-opacity:.6;
+  --scene-top-fade:7%;
+  --scene-image-scale:1;
+  --sticker-opacity:1;
+  --tab-slide-duration:260ms;
+}
+.kotone-scene{position:fixed;inset:var(--scene-top) 0 0;z-index:-1;pointer-events:none;overflow:hidden;opacity:var(--scene-opacity);-webkit-mask-image:linear-gradient(to bottom,transparent 0%,#000 var(--scene-top-fade),#000 100%);mask-image:linear-gradient(to bottom,transparent 0%,#000 var(--scene-top-fade),#000 100%);}
+.kotone-scene::before{content:"";position:absolute;inset:0;background:url("/frontend/kotone-scene.png") center 48% / cover no-repeat;transform:scale(var(--scene-image-scale));transform-origin:center;}
+
+.kotone-portrait-frame{position:fixed;left:10px;top:94px;bottom:40px;width:calc(var(--kotone-left) - 24px);z-index:110;pointer-events:none;user-select:none;display:flex;align-items:center;justify-content:center;mix-blend-mode:multiply;overflow:hidden;}
+.kotone-portrait{width:165%;max-width:none;flex-shrink:0;height:100%;object-fit:contain;object-position:center;}
+.kotone-sign-dock{position:fixed;top:86px;right:12px;width:calc(var(--kotone-right) - 24px);display:flex;align-items:flex-end;gap:8px;z-index:110;pointer-events:none;}
+.kotone-sign{position:static;width:calc(100% - 96px);max-width:175px;height:auto;opacity:.85;flex-shrink:0;pointer-events:none;user-select:none;mix-blend-mode:multiply;}
+.kotone-exit{pointer-events:auto;flex:0 0 88px;width:88px;height:30px;padding:0;margin:0 0 1px;border:0;background:transparent;cursor:pointer;transform:rotate(-3deg);filter:drop-shadow(0 1px 0 #ffe6ef);}
+.kotone-exit svg{display:block;}
+
+.kotone-exit[hidden]{display:none;}
+.kotone-background{display:block;right:-30px;bottom:8px;width:calc(var(--kotone-right) + 60px);max-width:240px;max-height:42vh;z-index:110;opacity:.9;mix-blend-mode:multiply;clip-path:inset(14% 18% 12% 18%);}
+
+/* 首页只有一条操作栏和下面的模板链接。 */
+.hero-workbench,#page-match.is-empty .hero-workbench{max-width:none;padding:15px 18px 12px;background:rgba(255,255,255,.78);backdrop-filter:blur(6px);box-shadow:0 3px 14px rgba(100,80,46,.035);}
+.match-toolbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:center;gap:18px;}
+.match-toolbar .btn{width:100%;height:40px;padding:0 14px;font-size:13px;justify-content:center;white-space:nowrap;}
+.toolbar-upload{min-width:0;}
+.toolbar-upload .toolbar-import{justify-content:flex-start;gap:10px;background:#fffbf1;border-color:#ead9b5;}
+.toolbar-upload.dragover{outline:2px dashed #d6a13a;outline-offset:3px;border-radius:9px;}
+#match-file-label{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.import-symbol{flex-shrink:0;}
+.toolbar-parameters{display:flex;align-items:center;gap:8px;}
+.toolbar-parameters .btn{flex:1;}
+.toolbar-templates{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:9px 0 0 14px;font-size:10.5px;color:var(--ink-muted);line-height:1.7;}
+.toolbar-templates a{color:#9c855d;text-decoration:none;}
+.toolbar-templates a:hover{color:#b78a3c;text-decoration:underline;}
+#page-match.is-empty .match-result-card{display:none;}
+.info-circle{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;flex:0 0 16px;padding:0;border:1px solid #b7a581;border-radius:50%;background:transparent;color:#968363;font:italic 600 11px Georgia,serif;cursor:pointer;vertical-align:middle;}
+.info-circle:hover{background:#fff1d4;color:#865e23;}
+.info-circle:focus-visible{outline:2px solid #d6a13a;outline-offset:3px;}
+#doc-modal-content{padding-bottom:55vh;}
+
+/* 桌面展开参数严格排成六列两行，末三格放开关和重置。 */
+.params-drawer.open{padding-top:13px;margin-top:12px;}
+.params-drawer .params-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:10px 14px;align-items:end;}
+.params-drawer .form-group{margin:0;min-width:0;}
+.params-drawer .form-label{font-size:11px;margin:0 0 5px;white-space:nowrap;}
+.params-drawer .input,.params-drawer .select{height:30px;padding:4px 7px;font-size:11.5px;}
+.params-drawer .parameter-switch{height:30px;display:flex;align-items:center;}
+.parameter-switch .checkbox-row{font-size:11px;gap:5px;white-space:nowrap;}
+.parameter-switch .btn{height:30px;width:100%;font-size:11.5px;}
+
+/* 偏好页改为窄面板，所有输入保持同一基线。 */
+#page-preferences .preferences-panel{width:520px;max-width:100%;margin:0;padding:20px 22px;background:rgba(255,255,255,.76);backdrop-filter:blur(6px);}
+.pref-section-title{display:flex;align-items:center;gap:7px;margin:17px 0 10px;}
+#page-preferences .pref-section-title h3{margin:0;font-size:12px;}
+.pref-path-row{gap:7px;flex-wrap:nowrap;}
+.pref-path-row input{min-width:0;height:32px;font-size:11px;padding:5px 7px;}
+.pref-path-row .btn{height:30px;flex-shrink:0;padding:0 9px;font-size:11px;}
+.pref-storage-toolbar{margin-top:9px;}
+.pref-storage-toolbar .pref-actions{gap:7px;}
+.pref-storage-toolbar .btn{font-size:11px;height:29px;}
+#pref-match-defaults{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 20px;}
+#pref-match-defaults .form-group{display:grid;grid-template-columns:minmax(0,1fr) 80px;gap:7px;align-items:center;margin:0;}
+#pref-match-defaults label{font-size:11px;margin:0;white-space:nowrap;}
+#pref-match-defaults .input,#pref-match-defaults .select{height:29px;padding:4px 6px;font-size:11px;}
+#pref-match-defaults input[type=checkbox]{justify-self:start;}
+.pref-save-row{margin-top:17px;justify-content:flex-end;}
+@media(min-width:1880px){.main-container{margin-left:auto;margin-right:auto;}.kotone-portrait-frame{left:max(12px,calc((100vw - 1360px)/2 - 242px));width:216px;}.kotone-sign-dock{right:max(14px,calc((100vw - 1360px)/2 - 226px));width:212px;}}
+@media(max-width:1100px){:root{--kotone-left:94px;--kotone-right:200px;}.kotone-portrait-frame{left:4px;top:170px;width:82px;}.kotone-sign-dock{top:160px;right:8px;width:184px;}.match-toolbar{gap:8px;}.match-toolbar .btn{font-size:12px;padding:0 7px;}.params-drawer .params-grid{gap:10px 8px;}}
+@media(max-width:850px){.params-drawer .params-grid{grid-template-columns:repeat(3,minmax(0,1fr));}.match-toolbar{grid-template-columns:repeat(2,minmax(0,1fr));}.toolbar-templates{margin-left:7px;}.kotone-sign-dock{top:auto;bottom:14px;right:14px;width:88px;}.kotone-sign{display:none;}}
+@media(max-width:760px){.main-container{width:auto;margin:20px 14px 80px;}.kotone-portrait-frame,.kotone-background{display:none;}.corner-copyright{bottom:52px;}.kotone-exit{background:rgba(255,253,249,.88);border-radius:12px;}.toolbar-templates{gap:7px;font-size:10px;}#page-preferences .preferences-panel{padding:18px;}#pref-match-defaults{gap:10px 12px;}#pref-match-defaults .form-group{grid-template-columns:minmax(0,1fr) 70px;}}
+
+/* 数据库概览在左，五个操作在右端两排。 */
+.db-overview{display:grid;grid-template-columns:minmax(0,4fr) minmax(200px,1fr);gap:14px;align-items:stretch;margin-bottom:16px;}
+.db-overview .stats-bar{grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0;}
+.db-overview .stat-card{padding:14px 12px;min-width:0;}
+.db-overview .stat-label,.db-overview .stat-sub{font-size:11px;}
+.db-overview-actions{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:7px;align-content:center;}
+.db-overview-actions .btn{grid-column:span 2;font-size:11px;padding:0 4px;height:32px;white-space:nowrap;}
+.db-overview-actions .btn:nth-child(n+4){grid-column:span 3;}
+.db-overview-actions .btn.active{color:#926a23;border-color:#dfc58e;background:#fff3d5;}
+/* 两个主题并排，参数五列两行，保存按钮占最后一格。 */
+#page-preferences .preferences-panel{width:100%;max-width:none;display:grid;grid-template-columns:230px minmax(0,1fr);gap:25px;padding:18px 22px;}
+.preferences-storage,.preferences-parameters{min-width:0;}
+.preferences-parameters{border-left:1px solid var(--border-light);padding-left:24px;}
+#page-preferences .pref-section-title{margin:0 0 13px;height:18px;}
+#pref-match-defaults{grid-template-columns:repeat(5,minmax(0,1fr));gap:10px 12px;align-items:end;}
+#pref-match-defaults .form-group{display:block;margin:0;min-width:0;}
+#pref-match-defaults label{display:block;font-size:10.5px;margin:0 0 5px;}
+#pref-match-defaults .input,#pref-match-defaults .select{width:100%;height:28px;}
+#pref-match-defaults .form-group:has(input[type=checkbox]){display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;min-height:48px;}
+#pref-match-defaults input[type=checkbox]{height:28px;margin:0;}
+#pref-match-defaults .pref-save-cell{display:flex;align-items:flex-end;height:28px;}
+.pref-save-cell .btn{width:100%;height:28px;font-size:11px;padding:0 6px;}
+#pref-feedback{font-size:10.5px;margin-left:auto;}
+.preferences-storage>.form-label{font-size:10.5px;margin-bottom:5px;}
+@media(max-width:1100px){#page-preferences .preferences-panel{grid-template-columns:180px minmax(0,1fr);gap:16px;padding:16px;}.preferences-parameters{padding-left:16px;}#pref-match-defaults{gap:10px 7px;}#pref-match-defaults label{font-size:10px;}.db-overview{grid-template-columns:minmax(0,1fr) 200px;}.db-overview .stats-bar{gap:7px;}.db-overview .stat-card{padding:12px 8px;}}
+@media(max-width:850px){.db-overview{grid-template-columns:1fr;}.db-overview-actions{max-width:360px;}#page-preferences .preferences-panel{grid-template-columns:1fr;}.preferences-parameters{border-left:0;border-top:1px solid var(--border-light);padding:15px 0 0;}#pref-match-defaults{grid-template-columns:repeat(5,minmax(0,1fr));}}
+@media(max-width:500px){#pref-match-defaults{grid-template-columns:repeat(3,minmax(0,1fr));}.db-overview .stats-bar{grid-template-columns:repeat(2,minmax(0,1fr));}}
+
+/* 用户提供的完整签名退出贴纸，整张图片是同一个按钮。 */
+.kotone-sign-dock .kotone-exit{width:100%;height:auto;flex:1 1 auto;margin:0;transform:none;filter:none;mix-blend-mode:multiply;opacity:.9;}
+.kotone-exit img{display:block;width:100%;height:auto;pointer-events:none;user-select:none;}
+.kotone-sign-dock .kotone-exit:hover{opacity:.9;filter:none;background:transparent;box-shadow:none;}
+.kotone-exit:focus-visible{outline:2px solid #d68ddb;outline-offset:5px;border-radius:8px;}
+@media(max-width:850px){.kotone-sign-dock{width:112px;}.kotone-sign-dock .kotone-exit{background:transparent;}}
+
+.kotone-portrait-frame,.kotone-background{opacity:var(--sticker-opacity);}
+.db-action-tabs{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px;padding:3px;border:1px solid var(--border-light);border-radius:11px;background:var(--bg-warm-subtle);}
+.db-overview-actions .db-action-tabs .btn{grid-column:auto;height:29px;padding:0 3px;border:0;border-radius:8px;background:transparent;box-shadow:none;color:var(--ink-muted);}
+.db-overview-actions .db-action-tabs .btn.active{background:#fff;color:#986e26;box-shadow:0 1px 4px rgba(119,87,34,.09);}
+.db-overview-actions .db-action-tabs .btn:hover{color:#986e26;background:rgba(255,255,255,.65);}
+.db-overview-actions>.btn{grid-column:span 3;}
+
+/* 共享滑动高亮：尺寸与位置由实际选中按钮测量，兼容字体与窗口变化。 */
+.sliding-tabs{position:relative;isolation:isolate;}
+.sliding-tabs::before{content:"";position:absolute;left:0;top:0;width:var(--tab-width,0px);height:var(--tab-height,0px);transform:translate(var(--tab-x,0px),var(--tab-y,0px));border-radius:inherit;background:#fff;box-shadow:0 1px 6px rgba(107,75,62,.08);pointer-events:none;opacity:0;}
+.sliding-tabs.slider-ready::before{opacity:1;transition:transform var(--tab-slide-duration) cubic-bezier(.22,.8,.3,1),width var(--tab-slide-duration) cubic-bezier(.22,.8,.3,1),height var(--tab-slide-duration) ease;}
+.sliding-tabs>button{position:relative;z-index:1;}
+.nav-pills.sliding-tabs .nav-btn.active,.db-overview-actions .db-action-tabs.sliding-tabs .btn.active{background:transparent;box-shadow:none;}
+.db-overview-actions .db-action-tabs.sliding-tabs .btn:hover{background:transparent;}
+.db-action-tabs.sliding-tabs::before{border-radius:8px;}
+@media(prefers-reduced-motion:reduce){.sliding-tabs.slider-ready::before{transition:none;}}

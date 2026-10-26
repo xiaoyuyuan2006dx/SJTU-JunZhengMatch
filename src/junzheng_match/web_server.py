@@ -456,9 +456,7 @@ def run_match_pipeline(file_bytes, filename, params):
             "unfilled_reason": "" if len(matches)>=pick_count else "满足导师回避、职称、方向及教师分配次数上限的候选不足，剩余位置留空。",
         })
 
-    if PREFERENCES.read().get("retain_uploads"):
-        suffix=".csv" if str(filename).lower().endswith(".csv") else ".xlsx"
-        (DATA_DIR/"uploads"/(str(time.time_ns())+suffix)).write_bytes(file_bytes)
+
     elapsed = round(time.time() - t0, 3)
 
     base_stem = Path(filename or "matched").stem
@@ -818,8 +816,10 @@ class FacultyRequestHandler(BaseHTTPRequestHandler):
             if path in ("/", "/index.html"):
                 content = (FRONTEND_DIR / "index.html").read_bytes()
                 return self._send_bytes(content, "text/html; charset=utf-8")
-            if path == "/frontend/kotone-mascot.png":
-                return self._send_bytes((FRONTEND_DIR / "kotone-mascot.png").read_bytes(), "image/png")
+            decoration_files={"kotone-mascot.png":"image/png","kotone-portrait.jpg":"image/jpeg","kotone-scene.png":"image/png","kotone-sign.png":"image/png","kotone-exit.png":"image/png"}
+            if path.startswith("/frontend/") and path.removeprefix("/frontend/") in decoration_files:
+                filename=path.removeprefix("/frontend/")
+                return self._send_bytes((FRONTEND_DIR / filename).read_bytes(),decoration_files[filename])
             if path == "/theme.css":
                 content = (FRONTEND_DIR / "theme.css").read_bytes()
                 return self._send_bytes(content, "text/css; charset=utf-8")
