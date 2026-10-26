@@ -24,7 +24,7 @@ def verify(executable=None):
         with open(Path(directory)/'process.log','wb') as log:
             process=subprocess.Popen(command+['--port',str(port),'--no-open'],env=env,stdin=subprocess.DEVNULL,stdout=log,stderr=log)
             try:
-                client=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+                client=urllib.request.build_opener(urllib.request.ProxyHandler({}),urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
                 def request(path,payload=None):
                     data=None if payload is None else json.dumps(payload).encode()
                     req=urllib.request.Request(address+path,data=data,headers={'Content-Type':'application/json'})
@@ -36,7 +36,9 @@ def verify(executable=None):
                         assert json.loads(health)['service']=='SJTU-JunZhengMatch';break
                     except (OSError,urllib.error.URLError):
                         if time.monotonic()>deadline or process.poll() is not None:
-                            raise RuntimeError('Application failed to start: '+(Path(directory)/'process.log').read_text(errors='replace'))
+                            error_log=Path(directory)/'JunZhengMatch-startup-error.log'
+                            details=error_log.read_text(errors='replace') if error_log.exists() else ''
+                            raise RuntimeError('Application failed to start: '+details+(Path(directory)/'process.log').read_text(errors='replace'))
                         time.sleep(.25)
                 for path in ['/','/app.js','/theme.css','/frontend/kotone-mascot.png']:
                     body,_=request(path);assert body,path

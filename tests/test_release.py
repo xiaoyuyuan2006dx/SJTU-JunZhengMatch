@@ -202,3 +202,11 @@ class ReviewRegressionTests(unittest.TestCase):
             z.writestr('xl/worksheets/sheet1.xml',f'<worksheet xmlns="{xio.NS_MAIN}"><sheetData><row><c r="ZZZ1" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>')
         data.seek(0)
         with self.assertRaisesRegex(ValueError,'256列'):xio.read_xlsx_rows(data)
+
+class StartupEncodingTests(unittest.TestCase):
+    def test_redirected_ascii_output_is_reconfigured(self):
+        import subprocess,sys
+        command=[sys.executable,'-c',"import entrypoint; entrypoint.initialize_streams(); print(chr(0x1f680))"]
+        result=subprocess.run(command,cwd=web.SCRIPT_DIR,env={**os.environ,'PYTHONIOENCODING':'ascii'},capture_output=True,timeout=20)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertIn(chr(0x1f680).encode('utf-8'),result.stdout)

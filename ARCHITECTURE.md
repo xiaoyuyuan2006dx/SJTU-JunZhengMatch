@@ -46,7 +46,7 @@ JunZhengMatch.spec     Windows原生单文件构建
 
 生产数据和私有导出留在用户配置的数据目录。Git/Docker/EXE的静态资源只含公开教师库和虚构学生示例。CSV对可能被Excel当作公式的外部文本做转义；XLSX文本使用内联字符串。
 
-Windows runner 使用 Python 3.12 和 PyInstaller 构建 x64 单文件 EXE。只读资源位于临时解包目录，教师库的可写副本始终位于用户数据目录。无控制台模式初始化标准流；内部脚本工作进程连接继承的输出管道，UTF-8日志返回网页。
+Windows runner 使用 Python 3.12 和 PyInstaller 构建 x64 单文件 EXE。只读资源位于临时解包目录，教师库的可写副本始终位于用户数据目录。无控制台模式初始化标准流，同时将重定向输出统一为UTF-8，避免启动日志中的中文或符号触发编码异常；内部脚本工作进程连接继承的输出管道，UTF-8日志返回网页。
 
 单元测试与源码HTTP验证通过后，并行执行Windows原生构建和Docker构建。Windows同时执行EXE内部自检及真实服务HTTP匹配、导出验证。成功后汇总EXE、Windows ZIP、使用说明、自检结果、Docker归档和SHA256校验值，先上传到草稿Release，再公开。已有版本若指向不同提交，拒绝覆盖。
 

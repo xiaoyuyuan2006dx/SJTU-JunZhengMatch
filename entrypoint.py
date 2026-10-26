@@ -27,6 +27,8 @@ def initialize_streams():
         if sys.stdout is None:sys.stdout=open(os.devnull,"w",encoding="utf-8")
     if sys.stderr is None:sys.stderr=sys.stdout
     if sys.stdin is None:sys.stdin=open(os.devnull,"r",encoding="utf-8")
+    for stream in (sys.stdout,sys.stderr):
+        if hasattr(stream,"reconfigure"):stream.reconfigure(encoding="utf-8",errors="backslashreplace")
 
 
 def self_test(report=None):
@@ -79,7 +81,12 @@ if __name__=='__main__':
             if '--report' in sys.argv:
                 Path(sys.argv[sys.argv.index('--report')+1]).write_text(json.dumps({'status':'error','error':str(exc)}))
             raise
-        if sys.platform=='win32':
+        import traceback
+        try:
+            folder=Path(os.getenv("JZ_DATA_DIR",tempfile.gettempdir()));folder.mkdir(parents=True,exist_ok=True)
+            (folder/"JunZhengMatch-startup-error.log").write_text(traceback.format_exc(),encoding="utf-8")
+        except OSError:pass
+        if sys.platform=='win32' and "--no-open" not in sys.argv:
             import ctypes
             ctypes.windll.user32.MessageBoxW(0,str(exc),'䇹政评审匹配',0)
         else:raise
