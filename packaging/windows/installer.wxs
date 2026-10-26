@@ -47,7 +47,7 @@
         <Control Id="Cancel" Type="PushButton" X="327" Y="248" Width="73" Height="22" Cancel="yes" Text="取消"><Publish Event="EndDialog" Value="Exit" /></Control>
       </Dialog>
       <Dialog Id="ProgressDlg" Width="420" Height="170" Title="正在安装" Modeless="yes">
-        <Control Id="Title" Type="Text" X="20" Y="20" Width="380" Height="25" Text="正在安装 JunZhenMatch…" />
+        <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="20" Width="380" Height="25" Text="正在安装 JunZhenMatch…" />
         <Control Id="ActionText" Type="Text" X="20" Y="60" Width="380" Height="20" Text="[ActionText]" />
         <Control Id="Progress" Type="ProgressBar" X="20" Y="90" Width="380" Height="15" ProgressBlocks="yes" />
       </Dialog>
