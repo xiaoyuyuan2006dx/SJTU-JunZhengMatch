@@ -163,7 +163,7 @@ try {
   $cases+='fresh_gui_edited_paths'
   if ($customRoot -ne $root) { $cases+='secondary_drive_install_uninstall_and_failure_rollback' }
   Invoke-Wizard $msiPath $customApp $customData 'custom-uninstall' -DirectUninstall
-  $cases+='direct_uninstall_has_separate_completion'
+  $cases+='windows_direct_uninstall_preserves_data'
   $installed=$false
   if (Test-Path $exe) { throw 'GUI uninstall left the custom EXE behind' }
   Assert-Data $customData $customHash

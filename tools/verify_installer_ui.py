@@ -128,6 +128,11 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                 button=None
                 if direct_uninstall and title=='Windows Installer':
                     texts=' '.join(text for _,text in windows(hwnd))
+                    # /x uses Windows' own confirmation/basic progress UI.
+                    # Its transient preparation window is not a second prompt.
+                    if 'confirm' in seen and not any(code in texts for code in ('1926','2753','2814')):
+                        if 'preparing to remove' in texts.lower() or 'Cancel' in [text.replace('&','') for _,text in windows(hwnd)]:
+                            continue
                     if 'are you sure you want to uninstall' not in texts.lower() and '确定要卸载' not in texts:
                         raise RuntimeError('Unexpected Windows uninstall prompt: '+texts)
                     buttons=[text.replace('&','') for _,text in windows(hwnd)]
@@ -233,7 +238,10 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
             if process.returncode!=1602 or errors or seen!=expected:raise RuntimeError(f'Version confirmation did not cancel cleanly: {process.returncode}; {seen}; {errors}')
             return
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
-        expected={'complete'} if direct_uninstall else ({'maintenance','complete'} if maintenance else {'setup','complete'})
+        if direct_uninstall:
+            assert seen in ({'confirm'},{'confirm','complete'}),seen
+            return
+        expected={'maintenance','complete'} if maintenance else {'setup','complete'}
         if seen-{'upgrade','confirm'}!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
         Path(log).with_suffix('.progress.json').write_text(json.dumps(dict(status='ok',stages=sorted(stages),positions=sorted(positions),activity_frames=sorted(activity_frames),upgrade_text=upgrade_text),ensure_ascii=False),encoding='utf-8')
     finally:
