@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      probe_installer:
+        description: '仅诊断已发布1.1.1的全新双击安装，不构建或发布'
+        required: false
+        type: boolean
+        default: false
       release_version:
         description: '发布版本号，如v1.1.0；留空只构建验证，不发布'
         required: false
@@ -14,7 +19,35 @@ on:
 permissions:
   contents: read
 jobs:
+  installer_probe:
+    if: inputs.probe_installer == true
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Probe published MSI without command-line overrides
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release download v1.1.1 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir probe
+          $msi=(Get-ChildItem probe/*.msi | Select-Object -First 1).FullName
+          $app=Join-Path $env:LOCALAPPDATA 'Programs/JunZhenMatch'
+          $data=Join-Path $env:USERPROFILE 'JunZhenMatch'
+          python tools/verify_installer_ui.py --msi $msi --app $app --data $data --log "$pwd/probe/install.log" --no-properties
+          Write-Host "UI test exit: $LASTEXITCODE; EXE exists: $(Test-Path (Join-Path $app 'JunZhengMatch.exe'))"
+          Get-Content probe/install.log | Select-String -Pattern 'Feature:','Component: AppFiles','2753','ConfigureStorage','ADDLOCAL','INSTALLLEVEL'
+          Start-Process msiexec.exe -ArgumentList @('/x',('"'+$msi+'"'),'/qn','/norestart') -Wait
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installer-probe
+          path: probe/*.log
   test:
+    if: inputs.probe_installer != true
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}

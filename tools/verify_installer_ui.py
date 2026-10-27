@@ -11,7 +11,7 @@ sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
-def install(msi,app,data,log,maintenance=False):
+def install(msi,app,data,log,maintenance=False,no_properties=False):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -34,7 +34,8 @@ def install(msi,app,data,log,maintenance=False):
     if any('"' in value for value in values):raise ValueError('MSI test paths cannot contain quotes')
     # msiexec parses PROPERTY="value with spaces" itself. list2cmdline would
     # quote the entire PROPERTY=value token and can open its command help UI.
-    process=subprocess.Popen(f'msiexec.exe /i "{values[0]}" /norestart INSTALLFOLDER="{values[1]}" JZDATADIR="{values[2]}" /L*v "{values[3]}"')
+    properties='' if no_properties else f' INSTALLFOLDER="{values[1]}" JZDATADIR="{values[2]}"'
+    process=subprocess.Popen(f'msiexec.exe /i "{values[0]}" /norestart{properties} /L*v "{values[3]}"')
     deadline=time.monotonic()+180;clicked=set();seen=set();errors=[]
     try:
         while process.poll() is None and time.monotonic()<deadline:
@@ -60,5 +61,5 @@ def install(msi,app,data,log,maintenance=False):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');args=parser.parse_args()
-    install(args.msi,args.app,args.data,args.log,args.maintenance)
+    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');parser.add_argument('--no-properties',action='store_true');args=parser.parse_args()
+    install(args.msi,args.app,args.data,args.log,args.maintenance,args.no_properties)
