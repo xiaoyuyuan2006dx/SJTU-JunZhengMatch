@@ -125,6 +125,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'MSI error fixture build failed' }
           python tools/verify_rollback_access.py
           if ($LASTEXITCODE -ne 0) { throw 'Rollback permission guard test failed' }
+          cmd /c "`"$vcvars`" >nul && cl /nologo /MT /O2 /utf-8 packaging\windows\maintenance_host.c /Fo:build\MaintenanceHost.obj /link /OUT:build\MaintenanceHost.exe /SUBSYSTEM:WINDOWS msi.lib user32.lib advapi32.lib shell32.lib"
+          if ($LASTEXITCODE -ne 0) { throw 'Maintenance host build failed' }
           dotnet tool install --global wix --version 5.0.2
           wix build packaging/windows/installer.wxs -arch x64 -d "Version=$env:APP_VERSION" -d "UiHelperPath=$((Resolve-Path build/InstallerUi.dll).Path)" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "BootstrapperPath=$((Resolve-Path dist/MicrosoftEdgeWebview2Setup.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -o "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi"
           if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' }
@@ -139,10 +141,15 @@ jobs:
           gh release download v1.1.1 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir previous
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download upgrade baseline' }
           $previous=(Get-ChildItem previous/*.msi | Select-Object -First 1).FullName
-          gh release download v1.2.0 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir current
+          gh release download v1.2.1 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir current
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download current installed baseline' }
           $current=(Get-ChildItem current/*.msi | Select-Object -First 1).FullName
           ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -PreviousMsi $previous -FutureMsi build/newer-version-fixture.msi -CurrentMsi $current -Report installer-test.json
+      - name: Verify restricted-token maintenance on isolated secondary volume
+        shell: pwsh
+        run: |
+          python tools/verify_restricted_maintenance.py --msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi"
+          if ($LASTEXITCODE -ne 0) { throw 'Restricted-token maintenance failed' }
       - run: python tools/verify_runtime.py --exe dist/JunZhengMatch.exe --desktop --report exe-runtime-test.json
       - uses: actions/download-artifact@v4
         with:

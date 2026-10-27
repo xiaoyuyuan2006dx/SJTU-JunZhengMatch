@@ -32,7 +32,7 @@ Windows 独立窗口另安装 `packaging/requirements-desktop.txt`，运行 `pyt
 
 ```bash
 python -m pip install -r packaging/requirements-dev.txt
-python tools/build_version.py --version v1.2.1
+python tools/build_version.py --version v1.2.2
 pyinstaller --clean --noconfirm packaging/JunZhengMatch.spec
 ```
 

@@ -8,13 +8,13 @@ parser.add_argument('--output',required=True)
 args=parser.parse_args()
 text=f'''## 修复
 
-- 修复 MSI 错误窗口的按钮焦点链，避免报错过程中再次触发2814。
-- 卸载完成页显示保留的数据路径，支持打开数据文件夹，移除安装提示和启动按钮。
-- 卸载及升级移除文件前，检查已有Windows回滚目录权限；失败时提前中止，不更改共享目录权限或关闭回滚。
+- 补齐错误窗口图标，修复权限报错时出现的2835。
+- 回滚目录探测改为只记录诊断，避免误拦截修复和卸载。
+- 增加同账户管理员重试，授权账户不一致时停止操作。
 
 ## 验证
 
-通过62项回归、Windows卸载与失败回滚验证，以及Docker检查。
+通过62项回归、Windows受限令牌维护、管理员重试和失败回滚验证，以及Docker检查。
 
 [完整说明](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/blob/{args.version}/README.md)
 '''

@@ -9,7 +9,7 @@ __declspec(dllexport) UINT __stdcall TestRollbackError(MSIHANDLE install) {
     MsiRecordSetInteger(record,1,1926);
     MsiRecordSetInteger(record,2,5);
     MsiRecordSetStringW(record,3,L"D:\\Config.Msi\\jz-fixture.rbf");
-    MsiProcessMessage(install,INSTALLMESSAGE_ERROR|MB_RETRYCANCEL,record);
+    MsiProcessMessage(install,INSTALLMESSAGE_ERROR|MB_RETRYCANCEL|MB_ICONWARNING,record);
     MsiCloseHandle(record);
     return ERROR_INSTALL_FAILURE;
 }

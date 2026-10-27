@@ -1,0 +1,133 @@
+"""Real maintenance with a restricted same-user token on an isolated NTFS VHD.
+
+Never changes the host's Config.Msi ACL. The full token retries against the same
+per-user product; this tests the security-context distinction behind issue 5.
+"""
+import argparse
+import ctypes as c
+from ctypes import wintypes as w
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def run_restricted(arguments):
+    adv=c.WinDLL('advapi32',use_last_error=True);kernel=c.WinDLL('kernel32',use_last_error=True)
+    class SIDATTR(c.Structure):_fields_=[('Sid',c.c_void_p),('Attributes',w.DWORD)]
+    class STARTUP(c.Structure):
+        _fields_=[('cb',w.DWORD),('reserved',w.LPWSTR),('desktop',w.LPWSTR),('title',w.LPWSTR),
+                  ('x',w.DWORD),('y',w.DWORD),('xs',w.DWORD),('ys',w.DWORD),('xc',w.DWORD),('yc',w.DWORD),
+                  ('fill',w.DWORD),('flags',w.DWORD),('show',w.WORD),('reserved2',w.WORD),('ptr',c.c_void_p),
+                  ('stdin',w.HANDLE),('stdout',w.HANDLE),('stderr',w.HANDLE)]
+    class PROCESS(c.Structure):_fields_=[('process',w.HANDLE),('thread',w.HANDLE),('pid',w.DWORD),('tid',w.DWORD)]
+    kernel.GetCurrentProcess.restype=w.HANDLE
+    kernel.CloseHandle.argtypes=[w.HANDLE];kernel.WaitForSingleObject.argtypes=[w.HANDLE,w.DWORD]
+    kernel.GetExitCodeProcess.argtypes=[w.HANDLE,c.POINTER(w.DWORD)]
+    adv.OpenProcessToken.argtypes=[w.HANDLE,w.DWORD,c.POINTER(w.HANDLE)]
+    adv.ConvertStringSidToSidW.argtypes=[w.LPCWSTR,c.POINTER(c.c_void_p)]
+    adv.CreateRestrictedToken.argtypes=[w.HANDLE,w.DWORD,w.DWORD,c.POINTER(SIDATTR),w.DWORD,c.c_void_p,w.DWORD,c.c_void_p,c.POINTER(w.HANDLE)]
+    adv.GetTokenInformation.argtypes=[w.HANDLE,c.c_int,c.c_void_p,w.DWORD,c.POINTER(w.DWORD)]
+    adv.SetTokenInformation.argtypes=[w.HANDLE,c.c_int,c.c_void_p,w.DWORD]
+    adv.CreateProcessAsUserW.argtypes=[w.HANDLE,w.LPCWSTR,w.LPWSTR,c.c_void_p,c.c_void_p,w.BOOL,w.DWORD,c.c_void_p,w.LPCWSTR,c.POINTER(STARTUP),c.POINTER(PROCESS)]
+    original=w.HANDLE();token=w.HANDLE();admin=c.c_void_p()
+    if not adv.OpenProcessToken(kernel.GetCurrentProcess(),0xF01FF,c.byref(original)):raise c.WinError(c.get_last_error())
+    try:
+        if not adv.ConvertStringSidToSidW('S-1-5-32-544',c.byref(admin)):raise c.WinError(c.get_last_error())
+        disabled=SIDATTR(admin,0)
+        if not adv.CreateRestrictedToken(original,1,1,c.byref(disabled),0,None,0,None,c.byref(token)):raise c.WinError(c.get_last_error())
+        size=w.DWORD();adv.GetTokenInformation(token,1,None,0,c.byref(size));user=c.create_string_buffer(size.value)
+        if not adv.GetTokenInformation(token,1,user,size,c.byref(size)):raise c.WinError(c.get_last_error())
+        owner=c.c_void_p.from_buffer(user)
+        if not adv.SetTokenInformation(token,4,c.byref(owner),c.sizeof(owner)):raise c.WinError(c.get_last_error())
+        startup=STARTUP();startup.cb=c.sizeof(startup);startup.desktop='winsta0\\default';process=PROCESS()
+        command=c.create_unicode_buffer(subprocess.list2cmdline(arguments))
+        if not adv.CreateProcessAsUserW(token,None,command,None,None,False,0,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
+        kernel.CloseHandle(process.thread)
+        try:
+            if kernel.WaitForSingleObject(process.process,180000)!=0:raise RuntimeError('Restricted maintenance worker timed out')
+            code=w.DWORD();kernel.GetExitCodeProcess(process.process,c.byref(code));return code.value
+        finally:kernel.CloseHandle(process.process)
+    finally:
+        if token:kernel.CloseHandle(token)
+        kernel.CloseHandle(original)
+
+
+def worker(root):
+    helper=c.WinDLL(str(root/'InstallerUi.dll'))
+    probe=helper.JzRollbackDirectoryAccess;probe.argtypes=[w.LPCWSTR];probe.restype=w.DWORD
+    denied=probe(str(root/'Config.Msi'));assert denied==5,denied
+    msi=c.WinDLL('msi');session=w.UINT()
+    msi.MsiOpenPackageW.argtypes=[w.LPCWSTR,c.POINTER(w.UINT)]
+    msi.MsiSetPropertyW.argtypes=[w.UINT,w.LPCWSTR,w.LPCWSTR]
+    check=helper.CheckRollbackAccess;check.argtypes=[w.UINT];check.restype=w.UINT
+    assert msi.MsiOpenPackageW(str(root/'package.msi'),c.byref(session))==0
+    try:
+        assert msi.MsiSetPropertyW(session,'INSTALLFOLDER',str(root/'program'))==0
+        assert check(session)==0, 'Caller-token access failure still blocks maintenance'
+    finally:msi.MsiCloseHandle(session)
+    result=subprocess.run(['msiexec.exe','/fa',str(root/'package.msi'),'/qn','/norestart','/L*v',str(root/'restricted-repair.log')],timeout=120)
+    log=(root/'restricted-repair.log').read_text(encoding='utf-16',errors='replace')
+    assert result.returncode in (0,3010) or (result.returncode==1603 and '1926' in log),result.returncode
+    assert 'CustomAction CheckRollbackAccess returned actual error code 1603' not in log
+    (root/'restricted-result.json').write_text(json.dumps(dict(status='ok',caller_probe=denied,diagnostic_return=0,engine_exit=result.returncode)),encoding='utf-8')
+
+
+def main(msi):
+    from verify_installer_ui import install
+    sid=subprocess.check_output(['whoami','/user','/fo','csv','/nh'],text=True).strip().split(',')[-1].strip('"')
+    letter=next(x for x in 'RSTUVWXYZ' if not Path(x+':/').exists());root=Path(letter+':/')
+    with tempfile.TemporaryDirectory() as temp:
+        disk=Path(temp)/'maintenance.vhd';script=Path(temp)/'diskpart.txt'
+        script.write_text(f'create vdisk file="{disk}" maximum=256 type=expandable\nselect vdisk file="{disk}"\nattach vdisk\ncreate partition primary\nformat fs=ntfs quick\nassign letter={letter}\n',encoding='ascii')
+        result=subprocess.run(['diskpart','/s',str(script)],capture_output=True,timeout=60)
+        assert root.exists(),result.stdout.decode(errors='replace')
+        installed=False
+        try:
+            shutil.copy2(msi,root/'package.msi');shutil.copy2('build/InstallerUi.dll',root/'InstallerUi.dll')
+            shutil.copy2(__file__,root/'worker.py')
+            for folder in ('program','data','Config.Msi'): (root/folder).mkdir()
+            # Only this new, disposable volume gets a protected rollback ACL.
+            subprocess.run(['icacls',str(root/'Config.Msi'),'/inheritance:r','/grant:r','*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F',f'*{sid}:(OI)(CI)RX'],check=True,capture_output=True)
+            for folder in ('program','data'):
+                subprocess.run(['icacls',str(root/folder),'/grant',f'*{sid}:(OI)(CI)F'],check=True,capture_output=True)
+            result=subprocess.run(['msiexec.exe','/i',str(root/'package.msi'),'/qn','/norestart',f'INSTALLFOLDER={root/"program"}',f'JZDATADIR={root/"data"}','/L*v',str(root/'baseline.log')],timeout=120)
+            assert result.returncode in (0,3010),result.returncode;installed=True
+            # The engine may clean up its empty rollback folder after install.
+            # Re-establish only this isolated test ACL before the restricted run.
+            (root/'Config.Msi').mkdir(exist_ok=True)
+            (root/'Config.Msi/test-marker.txt').write_text('isolated ACL fixture')
+            subprocess.run(['icacls',str(root/'Config.Msi'),'/inheritance:r','/grant:r','*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F',f'*{sid}:(OI)(CI)RX'],check=True,capture_output=True)
+            shutil.copy2('data/faculty.db',root/'data/sjtu_faculty_data.db')
+            expected=hashlib.sha256((root/'data/sjtu_faculty_data.db').read_bytes()).hexdigest()
+            assert run_restricted([sys.executable,str(root/'worker.py'),'--worker',str(root)])==0
+            report=json.loads((root/'restricted-result.json').read_text())
+            host=str(Path('build/MaintenanceHost.exe').resolve())
+            assert subprocess.run([host,'--verify-identity',sid]).returncode==0
+            assert subprocess.run([host,'--verify-identity','S-1-5-18']).returncode==5
+            install(root/'package.msi',root/'program',root/'data',root/'admin-repair.log',maintenance=True,no_properties=True,admin_host=host)
+            assert (root/'program/JunZhengMatch.exe').is_file()
+            assert hashlib.sha256((root/'program/JunZhengMatch.exe').read_bytes()).digest()==hashlib.sha256(Path('dist/JunZhengMatch.exe').read_bytes()).digest()
+            install(root/'package.msi',root/'program',root/'data',root/'admin-uninstall.log',maintenance=True,remove=True,no_properties=True,admin_host=host)
+            installed=False
+            assert not (root/'program/JunZhengMatch.exe').exists()
+            assert hashlib.sha256((root/'data/sjtu_faculty_data.db').read_bytes()).hexdigest()==expected
+            report.update(same_user_admin_retry_succeeded=True,other_account_rejected=True,data_preserved=True,isolated_secondary_volume=True)
+            Path('restricted-maintenance-test.json').write_text(json.dumps(report),encoding='utf-8')
+            print(json.dumps(report))
+        finally:
+            Path('installer-diagnostics').mkdir(exist_ok=True)
+            for log in root.glob('*.log'):shutil.copy2(log,Path('installer-diagnostics')/('restricted-'+log.name))
+            if installed:subprocess.run(['msiexec.exe','/x',str(root/'package.msi'),'/qn','/norestart'],timeout=120)
+            script.write_text(f'select vdisk file="{disk}"\ndetach vdisk\n',encoding='ascii')
+            subprocess.run(['diskpart','/s',str(script)],capture_output=True,timeout=60)
+
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser();parser.add_argument('--msi');parser.add_argument('--worker');args=parser.parse_args()
+    if args.worker:worker(Path(args.worker))
+    else:main(Path(args.msi).resolve())

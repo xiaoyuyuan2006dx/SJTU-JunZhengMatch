@@ -8,6 +8,7 @@
 #include <math.h>
 #include <wchar.h>
 #include <aclapi.h>
+#include <sddl.h>
 
 static HINSTANCE module;
 static DWORD ui_pid;
@@ -171,8 +172,8 @@ __declspec(dllexport) UINT __stdcall OpenExistingMaintenance(MSIHANDLE install) 
     if(!ShellExecuteExW(&info))MessageBoxW(NULL,L"无法打开维护页面，请重新打开已安装版本的安装包。",L"维护已安装版本",MB_OK|MB_ICONINFORMATION);
     return ERROR_SUCCESS;
 }
-/* Probe only a new disposable file: never alter a shared Config.Msi ACL or
-   touch another installer's rollback files. A failure must precede removal. */
+/* Diagnostic only: this token is not necessarily the installer engine token.
+   Never alter a shared Config.Msi ACL or another installer's rollback files. */
 __declspec(dllexport) DWORD __stdcall JzRollbackDirectoryAccess(const wchar_t *directory) {
     DWORD attributes=GetFileAttributesW(directory);
     if(attributes==INVALID_FILE_ATTRIBUTES) {
@@ -180,8 +181,8 @@ __declspec(dllexport) DWORD __stdcall JzRollbackDirectoryAccess(const wchar_t *d
         return error==ERROR_FILE_NOT_FOUND || error==ERROR_PATH_NOT_FOUND ? ERROR_SUCCESS : error;
     }
     if(!(attributes&FILE_ATTRIBUTE_DIRECTORY))return ERROR_DIRECTORY;
-    wchar_t file[32768];
-    swprintf_s(file,32768,L"%ls\\jz-permission-check-%lu-%llu.tmp",directory,GetCurrentProcessId(),GetTickCount64());
+    static volatile LONG sequence=0;wchar_t file[32768];
+    swprintf_s(file,32768,L"%ls\\jz-permission-check-%lu-%llu-%ld.tmp",directory,GetCurrentProcessId(),GetTickCount64(),InterlockedIncrement(&sequence));
     HANDLE probe=CreateFileW(file,GENERIC_READ|GENERIC_WRITE|DELETE|READ_CONTROL|WRITE_DAC,0,NULL,CREATE_NEW,
         FILE_ATTRIBUTE_TEMPORARY|FILE_FLAG_DELETE_ON_CLOSE,NULL);
     if(probe==INVALID_HANDLE_VALUE)return GetLastError();
@@ -199,13 +200,11 @@ __declspec(dllexport) UINT __stdcall CheckRollbackAccess(MSIHANDLE install) {
         if(!path[0] || !GetVolumePathNameW(path,volume,32768))continue;
         swprintf_s(directory,32768,L"%lsConfig.Msi",volume);
         DWORD error=JzRollbackDirectoryAccess(directory);
-        if(error!=ERROR_SUCCESS) {
-            MSIHANDLE record=MsiCreateRecord(3);
-            MsiRecordSetStringW(record,0,L"无法使用 Windows 回滚目录 [2]（错误 [3]）。本次操作尚未移除程序文件。\n\n请取消，使用安装此程序的同一账户检查该目录权限；若需管理员处理，请保留安装日志。不要删除 Config.Msi 内其他程序的回滚文件。");
-            MsiRecordSetInteger(record,1,0);MsiRecordSetStringW(record,2,directory);MsiRecordSetInteger(record,3,(int)error);
-            MsiProcessMessage(install,INSTALLMESSAGE_ERROR|MB_OK,record);MsiCloseHandle(record);
-            return ERROR_INSTALL_FAILURE;
-        }
+        MSIHANDLE record=MsiCreateRecord(2);
+        MsiRecordSetStringW(record,0,L"JZ rollback diagnostic: [1]; access result [2]. Informational only; Windows Installer performs the operation in its own security context.");
+        MsiRecordSetStringW(record,1,directory);MsiRecordSetInteger(record,2,(int)error);
+        MsiProcessMessage(install,INSTALLMESSAGE_INFO,record);MsiCloseHandle(record);
+
     }
     return ERROR_SUCCESS;
 }
@@ -230,6 +229,61 @@ __declspec(dllexport) UINT __stdcall OpenRetainedDataFolder(MSIHANDLE install) {
     if((INT_PTR)ShellExecuteW(NULL,L"open",folder,NULL,NULL,SW_SHOWNORMAL)<=32)
         MessageBoxW(NULL,L"无法打开数据目录，请按完成页显示的路径，在文件资源管理器中打开。",L"打开数据文件夹",MB_OK|MB_ICONINFORMATION);
     return ERROR_SUCCESS;
+}
+__declspec(dllexport) UINT __stdcall RestartElevated(MSIHANDLE install) {
+    wchar_t package[32768]={0},client[40]={0};DWORD length=32767;
+    MsiSetPropertyW(install,L"JZELEVATIONHANDOFF",L"");
+    MsiGetPropertyW(install,L"OriginalDatabase",package,&length);length=39;
+    MsiGetPropertyW(install,L"CLIENTPROCESSID",client,&length);
+    HANDLE process=OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION,FALSE,wcstoul(client,NULL,10)),token=NULL;
+    if(!process || !OpenProcessToken(process,TOKEN_QUERY,&token)) {
+        if(process)CloseHandle(process);
+        MessageBoxW(NULL,L"无法确认当前安装账户，请关闭后重新打开安装包。",L"管理员维护",MB_OK|MB_ICONINFORMATION);return ERROR_SUCCESS;
+    }
+    TOKEN_ELEVATION elevation={0};DWORD size=0;
+    GetTokenInformation(token,TokenElevation,&elevation,sizeof(elevation),&size);
+    if(elevation.TokenIsElevated) {
+        MessageBoxW(NULL,L"当前已使用管理员权限。若仍报目录权限错误，请保留安装日志，由管理员检查该目录权限。",L"管理员维护",MB_OK|MB_ICONINFORMATION);
+        CloseHandle(token);CloseHandle(process);return ERROR_SUCCESS;
+    }
+    GetTokenInformation(token,TokenUser,NULL,0,&size);
+    TOKEN_USER *user=(TOKEN_USER*)LocalAlloc(LPTR,size);LPWSTR sid=NULL;
+    BOOL identity=user && GetTokenInformation(token,TokenUser,user,size,&size) && ConvertSidToStringSidW(user->User.Sid,&sid);
+    CloseHandle(token);CloseHandle(process);if(user)LocalFree(user);
+    if(!identity) {MessageBoxW(NULL,L"无法确认当前安装账户，请关闭后重新打开安装包。",L"管理员维护",MB_OK|MB_ICONINFORMATION);return ERROR_SUCCESS;}
+    /* Extract a dedicated native host. It checks the SID again after UAC,
+       before launching msiexec, so alternate credentials cannot target HKCU
+       belonging to a different account. Nothing changes shared directory ACLs. */
+    MSIHANDLE database=MsiGetActiveDatabase(install),view=0,record=0;
+    wchar_t temp[MAX_PATH],base[MAX_PATH],host[MAX_PATH+8],parameters[33000];
+    BOOL ok=FALSE;HANDLE output=INVALID_HANDLE_VALUE;
+    if(GetTempPathW(MAX_PATH,temp) && GetTempFileNameW(temp,L"jzm",0,base)) {
+        swprintf_s(host,MAX_PATH+8,L"%ls.exe",base);DeleteFileW(base);
+        output=CreateFileW(host,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+    }
+    if(output!=INVALID_HANDLE_VALUE && MsiDatabaseOpenViewW(database,L"SELECT `Data` FROM `Binary` WHERE `Name`='MaintenanceHost'",&view)==ERROR_SUCCESS &&
+       MsiViewExecute(view,0)==ERROR_SUCCESS && MsiViewFetch(view,&record)==ERROR_SUCCESS) {
+        char bytes[8192];DWORD count=sizeof(bytes),written=0;UINT status;
+        ok=TRUE;
+        while((status=MsiRecordReadStream(record,1,bytes,&count))==ERROR_SUCCESS && count) {
+            if(!WriteFile(output,bytes,count,&written,NULL) || written!=count) {ok=FALSE;break;}
+            count=sizeof(bytes);
+        }
+        if(status!=ERROR_SUCCESS)ok=FALSE;
+    }
+    if(output!=INVALID_HANDLE_VALUE)CloseHandle(output);
+    if(record)MsiCloseHandle(record);if(view)MsiCloseHandle(view);if(database)MsiCloseHandle(database);
+    if(ok) {
+        swprintf_s(parameters,33000,L"%ls \"%ls\"",sid,package);
+        SHELLEXECUTEINFOW request={sizeof(request)};request.lpVerb=L"runas";request.lpFile=host;request.lpParameters=parameters;request.nShow=SW_SHOWNORMAL;
+        if(ShellExecuteExW(&request))MsiSetPropertyW(install,L"JZELEVATIONHANDOFF",L"1");
+        else {
+            if(GetLastError()!=ERROR_CANCELLED)MessageBoxW(NULL,L"未能打开管理员维护，请保留安装日志。",L"管理员维护",MB_OK|MB_ICONINFORMATION);
+            DeleteFileW(host);
+        }
+    } else MessageBoxW(NULL,L"未能准备管理员维护，请重新下载完整安装包。",L"管理员维护",MB_OK|MB_ICONINFORMATION);
+    if(!ok && output!=INVALID_HANDLE_VALUE)DeleteFileW(host);
+    LocalFree(sid);return ERROR_SUCCESS;
 }
 BOOL WINAPI DllMain(HINSTANCE instance,DWORD reason,LPVOID reserved) {
     (void)reserved;if(reason==DLL_PROCESS_ATTACH)module=instance;return TRUE;

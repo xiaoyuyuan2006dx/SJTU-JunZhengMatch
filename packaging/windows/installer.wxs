@@ -4,6 +4,7 @@
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="AppIcon" SourceFile="$(var.IconPath)" />
     <Binary Id="InstallerArtwork" SourceFile="build/installer-background.bmp" />
+    <Binary Id="InstallerErrorIcon" SourceFile="$(var.IconPath)" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch" />
     <Property Id="JZDATADIR" Secure="yes" />
@@ -120,6 +121,10 @@
         <Control Id="Version" Type="Text" X="310" Y="24" Width="90" Height="18" Text="v[ProductVersion]" Transparent="yes" />
         <Control Id="Intro" Type="Text" X="20" Y="65" Width="380" Height="70" Text="当前版本已安装，可修复或卸载。&#10;操作前请先退出程序，数据与设置会保留。" Transparent="yes" />
         <Control Id="Location" Type="Text" X="20" Y="145" Width="380" Height="55" Text="程序位置：[INSTALLFOLDER]" Transparent="yes" />
+        <Control Id="AdminRetry" Type="PushButton" X="20" Y="225" Width="130" Height="23" Text="管理员模式重试">
+          <Publish Event="DoAction" Value="RestartElevated" Order="1" Condition="1" />
+          <Publish Event="EndDialog" Value="Exit" Order="2" Condition="JZELEVATIONHANDOFF=1" />
+        </Control>
         <Control Id="Repair" Type="PushButton" X="85" Y="275" Width="105" Height="25" Default="yes" Text="修复安装">
           <Publish Event="AddLocal" Value="ALL" Order="1" Condition="!Complete&lt;&gt;3" />
           <Publish Event="ReinstallMode" Value="amus" Order="2" Condition="1" />
@@ -151,7 +156,8 @@
         <Control Id="TimeHint" Type="Text" X="20" Y="205" Width="380" Height="55" Text="通常约10–30秒，请稍候。" Transparent="yes" />
       </Dialog>
       <Dialog Id="InstallerErrorDlg" Width="400" Height="175" Title="JunZhenMatch 安装错误" ErrorDialog="yes">
-        <Control Id="ErrorText" Type="Text" TabSkip="no" X="18" Y="18" Width="364" Height="105" NoPrefix="yes" Text="安装遇到错误。" Transparent="yes" />
+        <Control Id="ErrorIcon" Type="Icon" X="18" Y="18" Width="24" Height="24" FixedSize="yes" IconSize="32" Text="InstallerErrorIcon" />
+        <Control Id="ErrorText" Type="Text" TabSkip="no" X="52" Y="18" Width="330" Height="105" NoPrefix="yes" Text="操作遇到错误。" Transparent="yes" />
         <Control Id="O" Type="PushButton" TabSkip="yes" X="285" Y="140" Width="90" Height="22" Text="确定">
           <Publish Event="EndDialog" Value="ErrorOk" />
         </Control>
@@ -202,6 +208,10 @@
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
         <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="65" Text="安装未完成，请查看日志。" Transparent="yes" />
         <Control Id="LogLocation" Type="Text" X="20" Y="150" Width="380" Height="70" Text="安装日志：[MsiLogFileLocation]" Transparent="yes" />
+        <Control Id="AdminRetry" Type="PushButton" X="155" Y="240" Width="130" Height="22" Text="管理员模式重试">
+          <Publish Event="DoAction" Value="RestartElevated" Order="1" Condition="1" />
+          <Publish Event="EndDialog" Value="Exit" Order="2" Condition="JZELEVATIONHANDOFF=1" />
+        </Control>
         <Control Id="OpenLog" Type="PushButton" X="20" Y="240" Width="120" Height="22" Text="查看安装日志">
           <Publish Event="DoAction" Value="OpenInstallLog" Condition="MsiLogFileLocation" />
         </Control>
@@ -220,6 +230,10 @@
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
         <Control Id="Title" Type="Text" X="20" Y="24" Width="380" Height="30" Text="{\TitleFont}发现已有版本" Transparent="yes" />
         <Control Id="Message" Type="Text" X="20" Y="90" Width="380" Height="90" Text="已安装 v[JZINSTALLEDVERSION]&#10;是否升级到 v[ProductVersion]？&#10;&#10;教师数据和设置会保留。" Transparent="yes" />
+        <Control Id="AdminRetry" Type="PushButton" X="20" Y="285" Width="130" Height="24" Text="管理员模式重试">
+          <Publish Event="DoAction" Value="RestartElevated" Order="1" Condition="1" />
+          <Publish Event="EndDialog" Value="Exit" Order="2" Condition="JZELEVATIONHANDOFF=1" />
+        </Control>
         <Control Id="Accept" Type="PushButton" X="190" Y="285" Width="125" Height="24" Default="yes" Text="升级">
           <Publish Event="EndDialog" Value="Return" Order="2" Condition="1" />
         </Control>
@@ -247,7 +261,7 @@
       <Show Dialog="ProgressDlg" Before="ExecuteAction" />
       <Show Dialog="ExitDialog" OnExit="success" />
       <Show Dialog="FatalError" OnExit="error" />
-      <Show Dialog="UserExit" OnExit="cancel" Condition="NOT JZMAINTENANCEHANDOFF" />
+      <Show Dialog="UserExit" OnExit="cancel" Condition="NOT JZMAINTENANCEHANDOFF AND NOT JZELEVATIONHANDOFF" />
       <Custom Action="DetectRelatedVersion" After="FindRelatedProducts" />
       <Show Dialog="NewerVersionDlg" Before="LaunchConditions" Condition="WIX_DOWNGRADE_DETECTED" />
       <Show Dialog="UpgradeConfirmDlg" After="CostFinalize" Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
@@ -257,6 +271,8 @@
       <Custom Action="MarkUninstallCompletion" Before="CaptureRetainedDataLocation" Condition="JZOPERATION=&quot;uninstall&quot;" />
       <Custom Action="CaptureRetainedDataLocation" Before="ProgressDlg" Condition="JZOPERATION=&quot;uninstall&quot;" />
     </InstallUISequence>
+    <Binary Id="MaintenanceHost" SourceFile="build/MaintenanceHost.exe" />
+    <CustomAction Id="RestartElevated" BinaryRef="InstallerUiHelper" DllEntry="RestartElevated" Return="ignore" />
     <Binary Id="InstallerUiHelper" SourceFile="$(var.UiHelperPath)" />
     <CustomAction Id="StartInstallActivity" BinaryRef="InstallerUiHelper" DllEntry="StartActivity" Return="ignore" />
     <CustomAction Id="DetectRelatedVersion" BinaryRef="InstallerUiHelper" DllEntry="DetectRelatedVersion" Return="check" />

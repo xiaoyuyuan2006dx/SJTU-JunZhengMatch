@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
-def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False,cancel_upgrade=False,expect_newer=False,open_existing=False,direct_uninstall=False,expect_error=False,verify_data_folder=False):
+def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False,cancel_upgrade=False,expect_newer=False,open_existing=False,direct_uninstall=False,expect_error=False,verify_data_folder=False,admin_host=None):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -89,7 +89,10 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     # quote the entire PROPERTY=value token and can open its command help UI.
     properties='' if no_properties else f' INSTALLFOLDER="{values[1]}" JZDATADIR="{values[2]}"'
     logging='' if automatic_log else f' /L*v "{values[3]}"'
-    process=subprocess.Popen(f'msiexec.exe {"/x" if direct_uninstall else "/i"} "{values[0]}" /norestart{properties}{logging}')
+    if admin_host:
+        sid=subprocess.check_output(['whoami','/user','/fo','csv','/nh'],text=True).strip().split(',')[-1].strip('"')
+        process=subprocess.Popen([str(admin_host),sid,values[0]]);automatic_log=True
+    else:process=subprocess.Popen(f'msiexec.exe {"/x" if direct_uninstall else "/i"} "{values[0]}" /norestart{properties}{logging}')
     deadline=time.monotonic()+180;clicked={};seen=set();errors=[]
     paths_edited=False
     edit_wait_started=None
@@ -247,7 +250,8 @@ exit 1'''
         if expect_error:
             assert process.returncode==1603 and seen=={'maintenance','expected-error','failure'},(process.returncode,seen,errors)
             text=Path(log).read_text(encoding='utf-16')
-            assert 'Error 2814' not in text and 'Note: 1: 2814' not in text,text[-4000:]
+            for code in ('2814','2835'):
+                assert 'Error '+code not in text and 'Note: 1: '+code not in text,text[-4000:]
             return
         if reject_paths:
             if process.returncode!=1602 or errors or seen!={'setup','invalid','cancelled'}:raise RuntimeError(f'Invalid path was not rejected before installation: {process.returncode}; {seen}; {errors}')
@@ -271,5 +275,6 @@ exit 1'''
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     for name in ('msi','app','data','log'):parser.add_argument('--'+name,required=True)
+    parser.add_argument('--admin-host')
     for name in ('maintenance','no-properties','edit-paths','remove','automatic-log','reject-paths','cancel-upgrade','expect-newer','open-existing','direct-uninstall','expect-error','verify-data-folder'):parser.add_argument('--'+name,action='store_true')
     install(**vars(parser.parse_args()))
