@@ -4,6 +4,7 @@ import ctypes
 from ctypes import wintypes as w
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import time
 
@@ -11,7 +12,7 @@ sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
-def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False):
+def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -38,12 +39,17 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     # msiexec parses PROPERTY="value with spaces" itself. list2cmdline would
     # quote the entire PROPERTY=value token and can open its command help UI.
     properties='' if no_properties else f' INSTALLFOLDER="{values[1]}" JZDATADIR="{values[2]}"'
-    process=subprocess.Popen(f'msiexec.exe /i "{values[0]}" /norestart{properties} /L*v "{values[3]}"')
+    logging='' if automatic_log else f' /L*v "{values[3]}"'
+    process=subprocess.Popen(f'msiexec.exe /i "{values[0]}" /norestart{properties}{logging}')
     deadline=time.monotonic()+180;clicked=set();seen=set();errors=[]
     paths_edited=False
+    discovered_log=None
     try:
         while process.poll() is None and time.monotonic()<deadline:
             for hwnd,title in windows():
+                if title in ('操作完成','安装失败'):
+                    for _,text in windows(hwnd):
+                        if text.startswith('安装日志：') and text[len('安装日志：'):].strip():discovered_log=Path(text[len('安装日志：'):].strip())
                 button=None
                 if title=='JunZhenMatch 安装':
                     button='安装';seen.add('setup')
@@ -70,6 +76,9 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                             user.PostMessageW(child,0x00F5,0,0);clicked.add((hwnd,button));print('MSI UI: '+title+' / '+button,flush=True);break
             time.sleep(.2)
         if process.poll() is None:raise RuntimeError('Visible installer timed out; wizard stages: '+repr(seen)+'; windows: '+repr([title for _,title in windows() if title]))
+        if automatic_log:
+            if not discovered_log or not discovered_log.exists():raise RuntimeError('Automatic MSI log path is missing from completion/failure page')
+            shutil.copyfile(discovered_log,log)
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
         expected={'maintenance','complete'} if maintenance else {'setup','complete'}
         if seen!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
@@ -78,5 +87,5 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');parser.add_argument('--no-properties',action='store_true');parser.add_argument('--edit-paths',action='store_true');parser.add_argument('--remove',action='store_true');args=parser.parse_args()
-    install(args.msi,args.app,args.data,args.log,args.maintenance,args.no_properties,args.edit_paths,args.remove)
+    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');parser.add_argument('--no-properties',action='store_true');parser.add_argument('--edit-paths',action='store_true');parser.add_argument('--remove',action='store_true');parser.add_argument('--automatic-log',action='store_true');args=parser.parse_args()
+    install(args.msi,args.app,args.data,args.log,args.maintenance,args.no_properties,args.edit_paths,args.remove,args.automatic_log)

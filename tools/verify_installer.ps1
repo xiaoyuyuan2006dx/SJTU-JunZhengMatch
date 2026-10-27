@@ -25,11 +25,12 @@ function Invoke-Quiet($package,$operation,$name,$extra=@()) {
     throw "MSI $name failed: $($process.ExitCode)"
   }
 }
-function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove) {
+function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog) {
   $arguments=@('tools/verify_installer_ui.py','--msi',$package,'--app',$app,'--data',$data,'--log',(Join-Path $root ($name+'.log')),'--no-properties')
   if ($Maintenance) {$arguments+='--maintenance'}
   if ($EditPaths) {$arguments+='--edit-paths'}
   if ($Remove) {$arguments+='--remove'}
+  if ($AutomaticLog) {$arguments+='--automatic-log'}
   & python @arguments
   if ($LASTEXITCODE -ne 0) { throw "Visible MSI $name failed" }
 }
@@ -65,11 +66,11 @@ try {
   # Fresh default installation, exactly like double-clicking. No INSTALLFOLDER,
   # JZDATADIR, ADDLOCAL or REINSTALL properties are injected into the MSI.
   if (Test-Path (Join-Path $defaultApp 'JunZhengMatch.exe')) { throw 'Windows test machine is not clean' }
-  Invoke-Wizard $msiPath $defaultApp $defaultData 'fresh-default'
+  Invoke-Wizard $msiPath $defaultApp $defaultData 'fresh-default' -AutomaticLog
   $installed=$true;$exe=Assert-Program $defaultApp
   Test-Program $exe "$pwd/fresh-install-test.json"
   $chosen=Get-DataPath;$hash=Mark-Data $chosen;$settings=Get-Content $configPath -Raw
-  $cases+='fresh_default_exe_runs'
+  $cases+='fresh_default_exe_runs';$cases+='automatic_install_log'
 
   # Reproduce the user's visible state: registered as installed, EXE gone.
   Remove-Item -LiteralPath $exe -Force

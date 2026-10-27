@@ -120,6 +120,7 @@
         <Control Id="Message" Type="Text" X="20" Y="65" Width="380" Height="65" HideCondition="REMOVE~=&quot;ALL&quot;" Text="程序已安装或修复。可从桌面或开始菜单启动“䇹政导师匹配”。关闭窗口只关闭界面，彻底退出请使用右上角退出贴纸。" />
         <Control Id="ProgramLocation" Type="Text" X="20" Y="145" Width="380" Height="65" HideCondition="REMOVE~=&quot;ALL&quot;" Text="程序文件：[INSTALLFOLDER]JunZhengMatch.exe" />
         <Control Id="RemovedMessage" Type="Text" X="20" Y="75" Width="380" Height="100" Hidden="yes" ShowCondition="REMOVE~=&quot;ALL&quot;" Text="程序已卸载。教师库、备份、导出结果和用户设置已保留。" />
+        <Control Id="LogLocation" Type="Text" X="20" Y="215" Width="380" Height="18" Text="安装日志：[MsiLogFileLocation]" />
         <Control Id="OpenFolder" Type="PushButton" X="20" Y="240" Width="120" Height="22" HideCondition="REMOVE~=&quot;ALL&quot;" Text="打开程序文件夹">
           <Publish Event="DoAction" Value="OpenProgramFolder" Condition="1" />
         </Control>
