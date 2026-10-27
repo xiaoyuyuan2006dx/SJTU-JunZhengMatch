@@ -28,6 +28,8 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     user.GetWindowRect.argtypes=[w.HWND,ctypes.POINTER(w.RECT)]
     user.GetWindowThreadProcessId.argtypes=[w.HWND,ctypes.POINTER(w.DWORD)]
     user.GetWindowLongPtrW.argtypes=[w.HWND,ctypes.c_int];user.GetWindowLongPtrW.restype=ctypes.c_ssize_t
+    user.WindowFromPoint.argtypes=[w.POINT];user.WindowFromPoint.restype=w.HWND
+    user.IsChild.argtypes=[w.HWND,w.HWND]
     class MouseInput(ctypes.Structure):
         _fields_=[('dx',w.LONG),('dy',w.LONG),('mouseData',w.DWORD),('dwFlags',w.DWORD),('time',w.DWORD),('dwExtraInfo',ctypes.c_size_t)]
     class KeyInput(ctypes.Structure):
@@ -175,7 +177,10 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                         if text.replace('&','')==button:
                             rect=w.RECT();user.GetWindowRect(child,ctypes.byref(rect))
                             user.SetForegroundWindow(hwnd)
-                            user.SetCursorPos((rect.left+rect.right)//2,(rect.top+rect.bottom)//2)
+                            point=w.POINT((rect.left+rect.right)//2,(rect.top+rect.bottom)//2)
+                            hit=user.WindowFromPoint(point)
+                            if hit!=child and not user.IsChild(child,hit):break
+                            user.SetCursorPos(point.x,point.y)
                             user.mouse_event(0x0002,0,0,0,0);user.mouse_event(0x0004,0,0,0,0)
                             clicked.add((hwnd,button));print('MSI UI: '+title+' / '+button,flush=True);break
                     # Refresh the window list after an action changes modal
