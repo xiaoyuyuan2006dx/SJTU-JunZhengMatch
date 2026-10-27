@@ -43,6 +43,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     process=subprocess.Popen(f'msiexec.exe /i "{values[0]}" /norestart{properties}{logging}')
     deadline=time.monotonic()+180;clicked=set();seen=set();errors=[]
     paths_edited=False
+    edit_wait_started=None
     discovered_log=None
     try:
         while process.poll() is None and time.monotonic()<deadline:
@@ -54,12 +55,16 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                 if title=='JunZhenMatch 安装':
                     button='安装';seen.add('setup')
                     if edit_paths and not paths_edited:
-                        edits=[]
-                        for child,_ in windows(hwnd):
+                        edits=[];controls=[]
+                        for child,text in windows(hwnd):
                             name=ctypes.create_unicode_buffer(128);user.GetClassNameW(child,name,128)
-                            if name.value.lower()=='edit':
+                            controls.append((name.value,text))
+                            if 'edit' in name.value.lower():
                                 rect=w.RECT();user.GetWindowRect(child,ctypes.byref(rect));edits.append((rect.top,child))
-                        if len(edits)!=2:raise RuntimeError('Expected program and data path edit fields: '+repr(edits))
+                        if len(edits)!=2:
+                            if edit_wait_started is None:edit_wait_started=time.monotonic()
+                            if time.monotonic()-edit_wait_started>10:raise RuntimeError('Path fields did not become ready: '+repr(controls))
+                            continue
                         for (_,child),value in zip(sorted(edits),[str(app),str(data)]):user.SetWindowTextW(child,value)
                         user.PostMessageW(hwnd,0x0028,0,0)
                         paths_edited=True
