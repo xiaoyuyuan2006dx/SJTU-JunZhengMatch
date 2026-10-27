@@ -70,18 +70,18 @@ def worker(root):
         assert msi.MsiSetPropertyW(session,'INSTALLFOLDER',str(root/'program'))==0
         assert check(session)==0, 'Caller-token access failure still blocks maintenance'
     finally:msi.MsiCloseHandle(session)
-    result=subprocess.run(['msiexec.exe','/fa',str(root/'package.msi'),'/qn','/norestart','/L*v',str(root/'restricted-repair.log')],timeout=120)
-    log=(root/'restricted-repair.log').read_text(encoding='utf-16',errors='replace')
+    result=subprocess.run(['msiexec.exe','/fa',str(root/'package.msi'),'/qn','/norestart','/L*v',str(root/'data/restricted-repair.log')],timeout=120)
+    log=(root/'data/restricted-repair.log').read_text(encoding='utf-16',errors='replace')
     assert result.returncode in (0,3010) or (result.returncode==1603 and '1926' in log),result.returncode
     assert 'CustomAction CheckRollbackAccess returned actual error code 1603' not in log
-    (root/'restricted-result.json').write_text(json.dumps(dict(status='ok',caller_probe=denied,diagnostic_return=0,engine_exit=result.returncode)),encoding='utf-8')
+    (root/'data/restricted-result.json').write_text(json.dumps(dict(status='ok',caller_probe=denied,diagnostic_return=0,engine_exit=result.returncode)),encoding='utf-8')
 
 
 def main(msi):
     from verify_installer_ui import install
     sid=subprocess.check_output(['whoami','/user','/fo','csv','/nh'],text=True).strip().split(',')[-1].strip('"')
     letter=next(x for x in 'RSTUVWXYZ' if not Path(x+':/').exists());root=Path(letter+':/')
-    with tempfile.TemporaryDirectory() as temp:
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
         disk=Path(temp)/'maintenance.vhd';script=Path(temp)/'diskpart.txt'
         script.write_text(f'create vdisk file="{disk}" maximum=256 type=expandable\nselect vdisk file="{disk}"\nattach vdisk\ncreate partition primary\nformat fs=ntfs quick\nassign letter={letter}\n',encoding='ascii')
         result=subprocess.run(['diskpart','/s',str(script)],capture_output=True,timeout=60)
@@ -105,7 +105,7 @@ def main(msi):
             shutil.copy2('data/faculty.db',root/'data/sjtu_faculty_data.db')
             expected=hashlib.sha256((root/'data/sjtu_faculty_data.db').read_bytes()).hexdigest()
             assert run_restricted([sys.executable,str(root/'worker.py'),'--worker',str(root)])==0
-            report=json.loads((root/'restricted-result.json').read_text())
+            report=json.loads((root/'data/restricted-result.json').read_text())
             host=str(Path('build/MaintenanceHost.exe').resolve())
             assert subprocess.run([host,'--verify-identity',sid]).returncode==0
             assert subprocess.run([host,'--verify-identity','S-1-5-18']).returncode==5
@@ -121,7 +121,7 @@ def main(msi):
             print(json.dumps(report))
         finally:
             Path('installer-diagnostics').mkdir(exist_ok=True)
-            for log in root.glob('*.log'):shutil.copy2(log,Path('installer-diagnostics')/('restricted-'+log.name))
+            for log in list(root.glob('*.log'))+list((root/'data').glob('*.log')):shutil.copy2(log,Path('installer-diagnostics')/('restricted-'+log.name))
             if installed:subprocess.run(['msiexec.exe','/x',str(root/'package.msi'),'/qn','/norestart'],timeout=120)
             script.write_text(f'select vdisk file="{disk}"\ndetach vdisk\n',encoding='ascii')
             subprocess.run(['diskpart','/s',str(script)],capture_output=True,timeout=60)
