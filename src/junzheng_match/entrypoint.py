@@ -92,7 +92,7 @@ def launch():
             (folder/'JunZhengMatch-startup-error.log').write_text(traceback.format_exc(),encoding='utf-8')
             if '--report' in sys.argv:Path(sys.argv[sys.argv.index('--report')+1]).write_text(json.dumps({'status':'error','error':str(error)}),encoding='utf-8')
         except OSError:pass
-        if os.name=='nt' and not any(arg in sys.argv for arg in ('--no-open','--serve','--self-test','--desktop-smoke','--configure-data')):
+        if os.name=='nt' and not any(arg in sys.argv for arg in ('--no-open','--serve','--self-test','--desktop-smoke','--launch-only','--configure-data')):
             import ctypes
             ctypes.windll.user32.MessageBoxW(0,str(error),'䇹政导师匹配',0)
         else:raise

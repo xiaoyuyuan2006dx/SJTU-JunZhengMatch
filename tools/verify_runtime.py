@@ -23,8 +23,19 @@ def verify(executable=None,desktop=False):
         env={**os.environ,'JZ_CONFIG_DIR':str(config),'JZ_PASSWORD':'','PYTHONPATH':str(root/'src'),'PYTHONIOENCODING':'utf-8'}
         env.pop('JZ_DATA_DIR',None)
         def launch(arguments):
-            process=subprocess.run(command+arguments,env=env,capture_output=True,timeout=150)
-            if process.returncode:raise RuntimeError(process.stderr.decode(errors='replace') or 'Launcher failed')
+            print('Launching: '+arguments[0],flush=True)
+            # WebView2 can inherit pipe handles. Waiting for pipe EOF can hang even
+            # after the launcher exits; use a file and wait on the process itself.
+            with open(folder/'launcher.log','w+b') as log:
+                process=subprocess.Popen(command+arguments,env=env,stdout=log,stderr=log)
+                try:process.wait(timeout=150)
+                except subprocess.TimeoutExpired:
+                    if os.name=='nt':subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=log,stderr=log,timeout=20)
+                    else:process.kill()
+                    raise RuntimeError('Launcher timed out: '+arguments[0])
+                if process.returncode:
+                    log.seek(0);raise RuntimeError(log.read().decode(errors='replace') or 'Launcher failed: '+arguments[0])
+            print('Completed: '+arguments[0],flush=True)
         launch(['--configure-data',str(data)])
         try:
             def client(index):
@@ -51,6 +62,7 @@ def verify(executable=None,desktop=False):
                 gui=json.loads(report.read_text());assert gui['status']=='ok' and gui['native_window']
                 assert gui['instance_id']==first['instance_id']
                 assert request('/health')['instance_id']==first['instance_id'],'Closing a desktop window stopped the backend'
+            print('Checking preferences, allocation and migration',flush=True)
             settings=request('/api/preferences');assert settings['match_defaults']['max_teacher_uses']==2
             defaults=settings['match_defaults'];defaults['max_teacher_uses']=1
             request('/api/preferences',{'match_defaults':defaults})
@@ -71,6 +83,7 @@ def verify(executable=None,desktop=False):
             assert request('/api/db/list?keyword='+urllib.parse.quote('共享测试教师'))['total']==1
             settings=request('/api/preferences');assert settings['match_defaults']['max_teacher_uses']==1
             status=request('/api/app/status');request('/api/app/shutdown',{'token':status['exit_token'],'confirm_all':True})
+            print('Stopping shared backend',flush=True)
             deadline=time.monotonic()+15
             while (target/'shared-instance.json').exists() and time.monotonic()<deadline:time.sleep(.1)
             assert not (target/'shared-instance.json').exists()

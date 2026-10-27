@@ -35,6 +35,7 @@ try {
   if ($LASTEXITCODE -ne 0) { throw 'Installed shortcut verification failed' }
   python tools/verify_runtime.py --exe $exe --desktop --report installed-runtime-test.json
   if ($LASTEXITCODE -ne 0) { throw 'Installed desktop/runtime verification failed' }
+  Write-Host 'Installed runtime passed; checking uninstall'
   New-Item -ItemType Directory -Force $data | Out-Null
   'preserve-user-data' | Set-Content (Join-Path $data 'user-data-marker.txt')
   $process=Start-Process msiexec.exe -ArgumentList @('/x',('"'+$msiPath+'"'),'/qn','/norestart','/L*v',('"'+(Join-Path $root 'uninstall.log')+'"')) -Wait -PassThru
