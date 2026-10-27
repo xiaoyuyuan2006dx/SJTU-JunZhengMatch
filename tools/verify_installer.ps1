@@ -133,12 +133,14 @@ try {
   $installed=$true
   if (Test-Path (Join-Path $emptyApp 'JunZhengMatch.exe')) { throw 'Same version empty registration unexpectedly copied the EXE' }
   $emptyHash=Mark-Data $emptyData
-  Invoke-Wizard $msiPath $emptyApp $emptyData 'same-version-empty-repair' -Maintenance
+  # Keep the fixture source consistent: Windows SecureRepair correctly rejects
+  # swapping in a byte-different MSI under the same package identity.
+  Invoke-Wizard $fixture $emptyApp $emptyData 'same-version-empty-repair' -Maintenance
   $exe=Assert-Program $emptyApp
   Test-Program $exe "$pwd/empty-registration-repair-test.json"
   Assert-Data $emptyData $emptyHash
   $cases+='same_version_advertised_repair_installs_components'
-  Invoke-Wizard $msiPath $emptyApp $emptyData 'same-version-uninstall' -Maintenance -Remove
+  Invoke-Wizard $fixture $emptyApp $emptyData 'same-version-uninstall' -Maintenance -Remove
   $installed=$false
   Assert-Data $emptyData $emptyHash
 
