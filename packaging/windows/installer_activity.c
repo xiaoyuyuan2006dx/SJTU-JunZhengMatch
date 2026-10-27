@@ -256,13 +256,17 @@ __declspec(dllexport) UINT __stdcall RestartElevated(MSIHANDLE install) {
        before launching msiexec, so alternate credentials cannot target HKCU
        belonging to a different account. Nothing changes shared directory ACLs. */
     MSIHANDLE database=MsiGetActiveDatabase(install),view=0,record=0;
-    wchar_t temp[MAX_PATH],base[MAX_PATH],host[MAX_PATH+8],parameters[33000],remove[40]={0};
+    wchar_t temp[MAX_PATH],base[MAX_PATH]={0},host[32768],parameters[33000],remove[40]={0};
     length=39;MsiGetPropertyW(install,L"REMOVE",remove,&length);
     UINT result=ERROR_INSTALL_FAILURE;
     BOOL ok=FALSE;HANDLE output=INVALID_HANDLE_VALUE;
-    if(GetTempPathW(MAX_PATH,temp) && GetTempFileNameW(temp,L"jzm",0,base)) {
-        swprintf_s(host,MAX_PATH+8,L"%ls.exe",base);DeleteFileW(base);
-        output=CreateFileW(host,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+    DWORD temp_length=GetTempPathW(MAX_PATH,temp);
+    if(temp_length && temp_length<MAX_PATH && GetTempFileNameW(temp,L"jzm",0,base)) {
+        DeleteFileW(base);
+        if(CreateDirectoryW(base,NULL)) {
+            swprintf_s(host,32768,L"%ls\\䇹政导师匹配-安装维护.exe",base);
+            output=CreateFileW(host,GENERIC_WRITE,0,NULL,CREATE_NEW,FILE_ATTRIBUTE_NORMAL,NULL);
+        }
     }
     if(output!=INVALID_HANDLE_VALUE && MsiDatabaseOpenViewW(database,L"SELECT `Data` FROM `Binary` WHERE `Name`='MaintenanceHost'",&view)==ERROR_SUCCESS &&
        MsiViewExecute(view,0)==ERROR_SUCCESS && MsiViewFetch(view,&record)==ERROR_SUCCESS) {
@@ -277,7 +281,7 @@ __declspec(dllexport) UINT __stdcall RestartElevated(MSIHANDLE install) {
     if(output!=INVALID_HANDLE_VALUE)CloseHandle(output);
     if(record)MsiCloseHandle(record);if(view)MsiCloseHandle(view);if(database)MsiCloseHandle(database);
     if(ok) {
-        swprintf_s(parameters,33000,L"%ls \"%ls\" %ls %ls",sid,package,client,!_wcsicmp(remove,L"ALL")?L"remove":L"maintain");
+        swprintf_s(parameters,33000,L"--user-sid %ls --installer \"%ls\" --wait-process %ls --operation %ls",sid,package,client,!_wcsicmp(remove,L"ALL")?L"remove":L"maintain");
         SHELLEXECUTEINFOW request={sizeof(request)};request.lpVerb=L"runas";request.lpFile=host;request.lpParameters=parameters;request.nShow=SW_SHOWNORMAL;
         if(ShellExecuteExW(&request)) {MsiSetPropertyW(install,L"JZELEVATIONHANDOFF",L"1");result=ERROR_INSTALL_USEREXIT;}
         else {
@@ -287,6 +291,7 @@ __declspec(dllexport) UINT __stdcall RestartElevated(MSIHANDLE install) {
         }
     } else MessageBoxW(NULL,L"未能准备管理员维护，请重新下载完整安装包。",L"管理员维护",MB_OK|MB_ICONINFORMATION);
     if(!ok && output!=INVALID_HANDLE_VALUE)DeleteFileW(host);
+    if(result!=ERROR_INSTALL_USEREXIT && base[0])RemoveDirectoryW(base);
     LocalFree(sid);return result;
 }
 BOOL WINAPI DllMain(HINSTANCE instance,DWORD reason,LPVOID reserved) {

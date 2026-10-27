@@ -15,7 +15,7 @@
 
 发现旧版本时会询问是否升级；相同版本可修复或卸载。安装包比已装版本旧时，可进入已装版本的维护页面。操作前先点击程序右上角的退出图案停止后台。
 
-程序和数据请选择分开的文件夹。安装通常约10–30秒，界面显示实际步骤、进度条及独立跳动的粒子；粒子是等待反馈，不代表安装百分比。首次启动缺少 WebView2 时使用包内完整离线组件本地安装，通常约10–60秒；已有环境直接跳过。升级、修复或卸载需要授权时，在 Windows 提示中点击“是”即可。安装失败可查看日志。
+程序和数据请选择分开的文件夹。安装通常约10–30秒，界面显示实际步骤、进度条及独立跳动的粒子；粒子是等待反馈，不代表安装百分比。首次启动缺少 WebView2 时通过轻量引导器联网准备，通常约1–3分钟；已有环境直接跳过。升级、修复或卸载需要授权时，在 Windows 提示中点击“是”即可。安装失败可查看日志。本程序安装跳过额外创建整机还原点，保留 MSI 安装失败回滚。
 
 默认数据位于 `%USERPROFILE%\JunZhenMatch`（C盘用户目录下），不存在时自动创建。浏览器版首次启动会提示位置，两版均可在“偏好设置”中修改存储位置及导入导出数据。教师库、导出、日志保存在此处；不保留上传原表。升级或卸载保留数据。卸载完成页显示实际数据路径，可点击“打开数据文件夹”；确认不再需要后，可自行删除数据目录。
 
@@ -28,11 +28,11 @@ python -m pip install -r packaging/requirements.txt
 python packaging/launcher.py
 ```
 
-Windows 独立窗口另安装 `packaging/requirements-desktop.txt`，系统需已有 WebView2（完整 MSI 随附离线组件），运行 `python packaging/launcher.py --desktop`。编译 EXE：
+Windows 独立窗口另安装 `packaging/requirements-desktop.txt`，系统需已有 WebView2（MSI 随附轻量引导器），运行 `python packaging/launcher.py --desktop`。编译 EXE：
 
 ```bash
 python -m pip install -r packaging/requirements-dev.txt
-python tools/build_version.py --version v1.2.3
+python tools/build_version.py --version v1.2.4
 pyinstaller --clean --noconfirm packaging/JunZhengMatch.spec
 ```
 

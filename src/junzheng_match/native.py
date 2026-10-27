@@ -48,8 +48,8 @@ def webview2_version():
 
 def ensure_webview2(interactive=False):
     if os.name!='nt' or webview2_version():return
-    installer=Path(sys.executable).parent/'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
-    if not installer.is_file():raise RuntimeError('缺少离线运行组件，请重新运行完整 MSI 安装包修复。')
+    installer=Path(sys.executable).parent/'MicrosoftEdgeWebview2Setup.exe'
+    if not installer.is_file():raise RuntimeError('缺少运行组件引导器，请重新运行 MSI 安装包修复。')
     command=[str(installer),'/silent','/install']
     try:
         if interactive:
@@ -57,7 +57,7 @@ def ensure_webview2(interactive=False):
             run_setup(command)
         else:subprocess.run(command,check=True,timeout=300)
     except (subprocess.SubprocessError,OSError) as error:
-        raise RuntimeError('离线运行组件未准备完成，请重新运行安装包修复。') from error
+        raise RuntimeError('运行组件未准备完成，请检查网络后重试，或运行安装包修复。') from error
     if not webview2_version():raise RuntimeError('组件安装后仍未检测到 WebView2，请保留错误信息并重新运行安装包修复。')
 
 

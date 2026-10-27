@@ -7,12 +7,12 @@ import time
 def progress_text(elapsed,timeout=300):
     seconds=max(0,int(elapsed))
     waited=f'已等待 {seconds//60}分{seconds%60:02d}秒'
-    if seconds<180:return waited+' · 通常约10–60秒，正在本地安装'
-    return waited+f' · 本地安装较慢，最多再等待{max(0,int(timeout)-seconds)}秒'
+    if seconds<180:return waited+' · 通常约1–3分钟，实际时间取决于网络'
+    return waited+f' · 组件准备较慢，最多再等待{max(0,int(timeout)-seconds)}秒'
 
 
 def run_setup(command,timeout=300):
-    """Use indeterminate progress: the offline component installer owns its progress."""
+    """Use indeterminate progress: the Microsoft component installer owns its progress."""
     import ctypes
     from ctypes import wintypes as w
     user=ctypes.windll.user32;common=ctypes.windll.comctl32
@@ -36,7 +36,7 @@ def run_setup(command,timeout=300):
     if not window:return subprocess.run(command,check=True,timeout=timeout)
     labels=[]
     try:
-        labels.append(user.CreateWindowExW(0,'STATIC','正在准备独立窗口所需的运行组件\r\n使用安装包内的离线组件，通常约10–60秒。\r\n准备完成后将打开程序。',0x50000000,22,18,570,65,window,None,None,None))
+        labels.append(user.CreateWindowExW(0,'STATIC','正在准备独立窗口所需的运行组件\r\n仅首次缺少组件时联网准备，通常约1–3分钟。\r\n准备完成后将打开程序。',0x50000000,22,18,570,65,window,None,None,None))
         bar=user.CreateWindowExW(0,'msctls_progress32','',0x50000008,22,96,570,18,window,None,None,None)
         user.SendMessageW(bar,0x040A,1,30)
         status=user.CreateWindowExW(0,'STATIC',progress_text(0,timeout),0x50000000,22,130,570,35,window,None,None,None)

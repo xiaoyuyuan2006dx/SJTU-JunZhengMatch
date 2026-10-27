@@ -20,4 +20,4 @@
 
 ## 微软运行组件
 
-MSI 随附 Microsoft WebView2 Evergreen x64 完整离线安装器，构建时从微软下载并验证数字签名，保留原文件及微软许可。该组件适用微软自身的许可，不属于本项目代码许可证的授权范围。分发方式见[微软 WebView2 分发说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution#offline-deployment)。已有运行环境时跳过安装；浏览器便携版不需要此组件。
+MSI 随附 Microsoft WebView2 Evergreen 轻量引导器，构建时从微软下载并验证数字签名，保留微软许可。缺少运行环境时才联网下载完整组件；已有环境直接使用。该组件适用微软自身许可，不属于本项目代码许可证的授权范围。[微软分发说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution)。

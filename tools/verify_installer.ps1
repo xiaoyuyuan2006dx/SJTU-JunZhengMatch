@@ -10,11 +10,13 @@ $installer=New-Object -ComObject WindowsInstaller.Installer
 $database=$installer.OpenDatabase($msiPath,0)
 function Get-MsiProperty($name) {
   $view=$database.OpenView(('SELECT `Value` FROM `Property` WHERE `Property`=''{0}''' -f $name))
-  $null=$view.Execute();$record=$view.Fetch();$value=$record.StringData(1);$null=$view.Close();return [string]$value
+  $null=$view.Execute();$record=$view.Fetch();$value=if ($record) {$record.StringData(1)} else {''};$null=$view.Close();return [string]$value
 }
 $publisher=Get-MsiProperty 'Manufacturer'
 if ($publisher -ne 'xiaoyuyuan2006dx') { throw "Unexpected MSI publisher: $($publisher | Out-String)" }
 $expectedVersion=Get-MsiProperty 'ProductVersion'
+if ((Get-MsiProperty 'MSIFASTINSTALL') -ne '1') { throw 'Package must skip only the system restore checkpoint' }
+if ((Get-MsiProperty 'DISABLEROLLBACK') -eq '1') { throw 'MSI transaction rollback must remain enabled' }
 $view=$database.OpenView('SELECT `Text` FROM `Control` WHERE `Dialog_`=''StorageSetupDlg'' AND `Control`=''Artwork''')
 $view.Execute();if ($view.Fetch().StringData(1) -ne 'InstallerArtwork') { throw 'Installer artwork missing' };$view.Close()
 
@@ -58,8 +60,8 @@ function Assert-RejectedQuiet($package,$app,$data,$name) {
 function Assert-Program($app) {
   $exe=Join-Path $app 'JunZhengMatch.exe'
   if (!(Test-Path -LiteralPath $exe)) { throw "Installer reported success without an EXE: $exe" }
-  $offline=Join-Path $app 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
-  if (!(Test-Path -LiteralPath $offline) -or (Get-Item -LiteralPath $offline).Length -lt 30MB) { throw 'Full offline runtime was not installed' }
+  $bootstrap=Join-Path $app 'MicrosoftEdgeWebview2Setup.exe'
+  if (!(Test-Path -LiteralPath $bootstrap) -or (Get-Item -LiteralPath $bootstrap).Length -gt 10MB) { throw 'Lightweight runtime bootstrapper missing' }
   if (!(Test-Path -LiteralPath (Join-Path $app 'desktop-mode'))) { throw 'MSI desktop launch marker is missing' }
   if ((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion -ne $expectedVersion) { throw 'Installed program version mismatch' }
   return $exe
@@ -103,6 +105,8 @@ try {
   }
   Invoke-Wizard $msiPath $defaultApp $defaultData 'fresh-default' -AutomaticLog
   $installed=$true;$exe=Assert-Program $defaultApp
+  $freshLog=Get-Content (Join-Path $root 'fresh-default.log') -Raw
+  if ($freshLog -match 'Calling SRSetRestorePoint API') { throw 'Fresh install created a system restore checkpoint' }
   Assert-DataPath $defaultData
   $progress=Get-Content (Join-Path $root 'fresh-default.progress.json') -Raw | ConvertFrom-Json
   if ($progress.stages.Count -lt 1 -or @($progress.positions | Where-Object {$_ -gt 0}).Count -lt 1) { throw 'MSI did not display actual stage/progress updates' }

@@ -93,8 +93,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     logging='' if automatic_log else f' /L*v "{values[3]}"'
     if admin_host:
         sid=subprocess.check_output(['whoami','/user','/fo','csv','/nh'],text=True).strip().split(',')[-1].strip('"')
-        host_args=[str(admin_host),sid,values[0]]
-        if direct_uninstall:host_args+=['0','remove']
+        host_args=[str(admin_host),'--user-sid',sid,'--installer',values[0],'--wait-process','0','--operation','remove' if direct_uninstall else 'maintain']
         process=subprocess.Popen(host_args);automatic_log=True
     else:process=subprocess.Popen(f'msiexec.exe {"/x" if direct_uninstall else "/i"} "{values[0]}" /norestart{properties}{logging}')
     deadline=time.monotonic()+180;clicked={};seen=set();errors=[]

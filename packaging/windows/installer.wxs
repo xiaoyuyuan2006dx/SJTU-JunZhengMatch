@@ -9,6 +9,8 @@
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch" />
     <Property Id="JZDATADIR" Secure="yes" />
     <Property Id="INSTALLFOLDER" Secure="yes" />
+    <!-- Skip only this package's system checkpoint; MSI transaction rollback remains enabled. -->
+    <Property Id="MSIFASTINSTALL" Value="1" Secure="yes" />
     <Property Id="MsiLogging" Value="voicewarmupx" />
     <Property Id="JZOPERATION" Value="install" />
     <Property Id="JZPROGRESSTITLE" Value="正在安装" />
@@ -31,7 +33,7 @@
         <Directory Id="INSTALLFOLDER" Name="JunZhenMatch">
           <Component Id="AppFiles" Guid="F833CD4F-49D1-4216-B2F3-3222CF2A21E7">
             <File Id="MainExe" Source="$(var.AppPath)" />
-            <File Id="WebviewOfflineInstaller" Source="$(var.RuntimeInstallerPath)" />
+            <File Id="WebviewBootstrapper" Source="$(var.BootstrapperPath)" />
             <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstalledVersion" Type="string" Value="$(var.Version)" KeyPath="yes" />
             <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
             <RemoveFolder Id="RemoveAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
