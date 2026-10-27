@@ -37,15 +37,18 @@ def logon_run(arguments, name, password, elevated=False):
         adv.LogonUserW.argtypes=[w.LPCWSTR,w.LPCWSTR,w.LPCWSTR,w.DWORD,w.DWORD,c.POINTER(w.HANDLE)]
         adv.GetTokenInformation.argtypes=[w.HANDLE,w.DWORD,c.c_void_p,w.DWORD,c.POINTER(w.DWORD)]
         adv.CreateProcessWithTokenW.argtypes=[w.HANDLE,w.DWORD,w.LPCWSTR,w.LPWSTR,w.DWORD,c.c_void_p,w.LPCWSTR,c.POINTER(STARTUP),c.POINTER(PROCESS)]
-        token=w.HANDLE();linked=w.HANDLE();size=w.DWORD();full=w.DWORD()
+        adv.DuplicateTokenEx.argtypes=[w.HANDLE,w.DWORD,c.c_void_p,w.DWORD,w.DWORD,c.POINTER(w.HANDLE)]
+        token=w.HANDLE();linked=w.HANDLE();primary=w.HANDLE();size=w.DWORD();full=w.DWORD()
         if not adv.LogonUserW(name,'.',password,2,0,c.byref(token)):raise c.WinError(c.get_last_error())
         try:
             assert adv.GetTokenInformation(token,20,c.byref(full),c.sizeof(full),c.byref(size))
             if not full.value:
                 if not adv.GetTokenInformation(token,19,c.byref(linked),c.sizeof(linked),c.byref(size)):raise c.WinError(c.get_last_error())
             active=linked if linked.value else token
-            if not adv.CreateProcessWithTokenW(active,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
+            if not adv.DuplicateTokenEx(active,0x02000000,None,2,1,c.byref(primary)):raise c.WinError(c.get_last_error())
+            if not adv.CreateProcessWithTokenW(primary,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
         finally:
+            if primary.value:kernel.CloseHandle(primary)
             if linked.value:kernel.CloseHandle(linked)
             kernel.CloseHandle(token)
     elif not adv.CreateProcessWithLogonW(name,'.',password,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
