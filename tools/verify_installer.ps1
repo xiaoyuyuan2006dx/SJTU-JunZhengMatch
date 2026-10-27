@@ -18,6 +18,11 @@ $expectedVersion=Get-MsiProperty 'ProductVersion'
 $view=$database.OpenView('SELECT `Text` FROM `Control` WHERE `Dialog_`=''StorageSetupDlg'' AND `Control`=''Artwork''')
 $view.Execute();if ($view.Fetch().StringData(1) -ne 'InstallerArtwork') { throw 'Installer artwork missing' };$view.Close()
 
+$view=$database.OpenView('SELECT `Control` FROM `Control` WHERE `Control`=''AdminRetry''')
+$view.Execute();if ($view.Fetch()) { throw 'Manual administrator button must not be shipped' };$view.Close()
+$view=$database.OpenView('SELECT `Text` FROM `Control` WHERE `Dialog_`=''StorageSetupDlg'' AND `Control`=''Watermark''')
+$view.Execute();if ($view.Fetch().StringData(1) -notlike '*TaroDeluxe · Codex - Fujita Kotone*') { throw 'Installer watermark missing' };$view.Close()
+
 function Invoke-Quiet($package,$operation,$name,$extra=@()) {
   $arguments=@($operation,('"'+$package+'"'),'/qn','/norestart')+$extra+@('/L*v',('"'+(Join-Path $root ($name+'.log'))+'"'))
   $process=Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru
@@ -53,6 +58,8 @@ function Assert-RejectedQuiet($package,$app,$data,$name) {
 function Assert-Program($app) {
   $exe=Join-Path $app 'JunZhengMatch.exe'
   if (!(Test-Path -LiteralPath $exe)) { throw "Installer reported success without an EXE: $exe" }
+  $offline=Join-Path $app 'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
+  if (!(Test-Path -LiteralPath $offline) -or (Get-Item -LiteralPath $offline).Length -lt 30MB) { throw 'Full offline runtime was not installed' }
   if (!(Test-Path -LiteralPath (Join-Path $app 'desktop-mode'))) { throw 'MSI desktop launch marker is missing' }
   if ((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion -ne $expectedVersion) { throw 'Installed program version mismatch' }
   return $exe

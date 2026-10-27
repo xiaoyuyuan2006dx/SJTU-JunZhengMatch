@@ -6,15 +6,13 @@ parser=argparse.ArgumentParser()
 parser.add_argument('--version',required=True)
 parser.add_argument('--output',required=True)
 args=parser.parse_args()
-text=f'''## 修复
+text=f'''## 更新
 
-- 补齐错误窗口图标，修复权限报错时出现的2835。
-- 回滚目录探测改为只记录诊断，避免误拦截修复和卸载。
-- 增加同账户管理员重试，授权账户不一致时停止操作。
+- 维护时自动申请所需权限，移除手动管理员按钮。
+- MSI 内置 WebView2 完整离线组件，已有环境时跳过安装。
+- 调整安装引导配色、文字层次和底色，加入左下角水印。
 
-## 验证
-
-通过62项回归、Windows普通账户维护、管理员重试和失败回滚验证，以及Docker检查。
+通过回归及 Windows 安装、修复、卸载和数据保留验证。
 
 [完整说明](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/blob/{args.version}/README.md)
 '''

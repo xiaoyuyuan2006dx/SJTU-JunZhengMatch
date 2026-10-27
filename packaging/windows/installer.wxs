@@ -31,7 +31,7 @@
         <Directory Id="INSTALLFOLDER" Name="JunZhenMatch">
           <Component Id="AppFiles" Guid="F833CD4F-49D1-4216-B2F3-3222CF2A21E7">
             <File Id="MainExe" Source="$(var.AppPath)" />
-            <File Id="WebviewBootstrapper" Source="$(var.BootstrapperPath)" />
+            <File Id="WebviewOfflineInstaller" Source="$(var.RuntimeInstallerPath)" />
             <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstalledVersion" Type="string" Value="$(var.Version)" KeyPath="yes" />
             <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
             <RemoveFolder Id="RemoveAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
@@ -85,19 +85,23 @@
       <ProgressText Action="RemoveExistingProducts" Message="正在移除旧版本" />
       <ProgressText Action="RemoveFiles" Template="[1]" Message="正在卸载程序文件" />
       <ProgressText Action="InstallFinalize" Message="正在完成安装" />
-      <TextStyle Id="DefaultFont" FaceName="Microsoft YaHei UI" Size="9" Red="91" Green="83" Blue="99" />
-      <TextStyle Id="TitleFont" FaceName="Microsoft YaHei UI" Size="15" Bold="yes" Red="124" Green="90" Blue="128" />
+      <TextStyle Id="DefaultFont" FaceName="Microsoft YaHei UI" Size="9" Red="67" Green="65" Blue="79" />
+      <TextStyle Id="TitleFont" FaceName="Microsoft YaHei UI" Size="17" Bold="yes" Red="95" Green="74" Blue="112" />
+      <TextStyle Id="LabelFont" FaceName="Microsoft YaHei UI" Size="9" Bold="yes" Red="69" Green="109" Blue="104" />
+      <TextStyle Id="MutedFont" FaceName="Microsoft YaHei UI" Size="8" Red="128" Green="116" Blue="135" />
+      <TextStyle Id="WatermarkFont" FaceName="Segoe UI" Size="7" Red="151" Green="123" Blue="144" />
       <Property Id="DefaultUIFont" Value="DefaultFont" />
       <Dialog Id="StorageSetupDlg" Width="640" Height="342" Title="JunZhenMatch 安装" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Watermark" Type="Text" X="20" Y="320" Width="220" Height="12" TabSkip="yes" Text="{\WatermarkFont}TaroDeluxe · Codex - Fujita Kotone" Transparent="yes" />
         <Control Id="Title" Type="Text" X="20" Y="18" Width="280" Height="30" Text="{\TitleFont}安装䇹政导师匹配" Transparent="yes" />
-        <Control Id="Version" Type="Text" X="310" Y="24" Width="90" Height="18" Text="v[ProductVersion]" Transparent="yes" />
+        <Control Id="Version" Type="Text" X="310" Y="24" Width="90" Height="18" Text="{\MutedFont}v[ProductVersion]" Transparent="yes" />
         <Control Id="Intro" Type="Text" X="20" Y="55" Width="380" Height="30" Text="选择程序和数据的位置。" Transparent="yes" />
-        <Control Id="ProgramLabel" Type="Text" X="20" Y="98" Width="380" Height="17" Text="程序位置：" Transparent="yes" />
+        <Control Id="ProgramLabel" Type="Text" X="20" Y="98" Width="380" Height="17" Text="{\LabelFont}程序位置：" Transparent="yes" />
         <Control Id="ProgramPath" Type="PathEdit" X="20" Y="118" Width="380" Height="20" Property="INSTALLFOLDER" />
-        <Control Id="DataLabel" Type="Text" X="20" Y="153" Width="380" Height="17" Text="数据位置：" Transparent="yes" />
+        <Control Id="DataLabel" Type="Text" X="20" Y="153" Width="380" Height="17" Text="{\LabelFont}数据位置：" Transparent="yes" />
         <Control Id="DataPath" Type="PathEdit" X="20" Y="173" Width="380" Height="20" Property="JZDATADIR" />
-        <Control Id="Hint" Type="Text" X="20" Y="203" Width="380" Height="45" Text="程序和数据分开保存，卸载保留数据。" Transparent="yes" />
+        <Control Id="Hint" Type="Text" X="20" Y="203" Width="380" Height="45" Text="{\MutedFont}程序与数据分开保存 · 卸载保留数据" Transparent="yes" />
         <Control Id="Install" Type="PushButton" X="245" Y="300" Width="75" Height="22" Default="yes" Text="安装">
           <Publish Event="SetTargetPath" Value="INSTALLFOLDER" Order="1" Condition="1" />
           <Publish Event="SetTargetPath" Value="JZDATADIR" Order="2" Condition="1" />
@@ -117,14 +121,11 @@
       </Dialog>
       <Dialog Id="MaintenanceDlg" Width="640" Height="342" Title="JunZhenMatch 维护" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Watermark" Type="Text" X="20" Y="320" Width="220" Height="12" TabSkip="yes" Text="{\WatermarkFont}TaroDeluxe · Codex - Fujita Kotone" Transparent="yes" />
         <Control Id="Title" Type="Text" X="20" Y="18" Width="280" Height="30" Text="{\TitleFont}修复或卸载" Transparent="yes" />
-        <Control Id="Version" Type="Text" X="310" Y="24" Width="90" Height="18" Text="v[ProductVersion]" Transparent="yes" />
-        <Control Id="Intro" Type="Text" X="20" Y="65" Width="380" Height="70" Text="当前版本已安装，可修复或卸载。&#10;操作前请先退出程序，数据与设置会保留。" Transparent="yes" />
+        <Control Id="Version" Type="Text" X="310" Y="24" Width="90" Height="18" Text="{\MutedFont}v[ProductVersion]" Transparent="yes" />
+        <Control Id="Intro" Type="Text" X="20" Y="90" Width="380" Height="70" Text="当前版本已安装，可修复或卸载。&#10;操作前请先退出程序，数据与设置会保留。" Transparent="yes" />
         <Control Id="Location" Type="Text" X="20" Y="145" Width="380" Height="55" Text="程序位置：[INSTALLFOLDER]" Transparent="yes" />
-        <Control Id="AdminRetry" Type="PushButton" X="20" Y="225" Width="130" Height="23" Text="管理员模式重试">
-          <Publish Event="DoAction" Value="RestartElevated" Order="1" Condition="1" />
-          <Publish Event="EndDialog" Value="Exit" Order="2" Condition="JZELEVATIONHANDOFF=1" />
-        </Control>
         <Control Id="Repair" Type="PushButton" X="85" Y="275" Width="105" Height="25" Default="yes" Text="修复安装">
           <Publish Event="AddLocal" Value="ALL" Order="1" Condition="!Complete&lt;&gt;3" />
           <Publish Event="ReinstallMode" Value="amus" Order="2" Condition="1" />
@@ -143,7 +144,8 @@
       </Dialog>
       <Dialog Id="ProgressDlg" Width="640" Height="342" Title="[JZPROGRESSTITLE]" Modeless="yes" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="42" Width="380" Height="25" Text="[JZPROGRESSTITLE]…" Transparent="yes" />
+        <Control Id="Watermark" Type="Text" X="20" Y="320" Width="220" Height="12" TabSkip="yes" Text="{\WatermarkFont}TaroDeluxe · Codex - Fujita Kotone" Transparent="yes" />
+        <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="22" Width="380" Height="32" Text="{\TitleFont}[JZPROGRESSTITLE]…" Transparent="yes" />
         <Control Id="ActionText" Type="Text" X="20" Y="108" Width="380" Height="20" Text="正在准备安装…" Transparent="yes">
           <Subscribe Event="ActionText" Attribute="Text" />
         </Control>
@@ -182,9 +184,11 @@
       </Dialog>
       <Dialog Id="ExitDialog" Width="640" Height="342" Title="[JZCOMPLETIONTITLE]" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Message" Type="Text" X="20" Y="65" Width="380" Height="95" HideCondition="JZOPERATION=&quot;uninstall&quot;" Text="1. 双击桌面或开始菜单的快捷方式打开。&#10;&#10;2. 退出时，请点击程序右上角的退出图案。" Transparent="yes" />
+        <Control Id="Watermark" Type="Text" X="20" Y="320" Width="220" Height="12" TabSkip="yes" Text="{\WatermarkFont}TaroDeluxe · Codex - Fujita Kotone" Transparent="yes" />
+        <Control Id="Title" Type="Text" X="20" Y="18" Width="380" Height="32" Text="{\TitleFont}[JZCOMPLETIONTITLE]" Transparent="yes" />
+        <Control Id="Message" Type="Text" X="20" Y="90" Width="380" Height="70" HideCondition="JZOPERATION=&quot;uninstall&quot;" Text="1. 双击桌面或开始菜单的快捷方式打开。&#10;&#10;2. 退出时，请点击程序右上角的退出图案。" Transparent="yes" />
         <Control Id="ProgramLocation" Type="Text" X="20" Y="175" Width="380" Height="40" HideCondition="JZOPERATION=&quot;uninstall&quot;" Text="程序位置：[INSTALLFOLDER]" Transparent="yes" />
-        <Control Id="RemovedMessage" Type="Text" X="20" Y="75" Width="380" Height="100" Hidden="yes" ShowCondition="JZOPERATION=&quot;uninstall&quot;" Text="程序和快捷方式已移除。&#10;&#10;教师库、备份、导出结果和设置保留在原存储目录。&#10;确认不再需要后，可自行删除该数据目录。" Transparent="yes" />
+        <Control Id="RemovedMessage" Type="Text" X="20" Y="90" Width="380" Height="80" Hidden="yes" ShowCondition="JZOPERATION=&quot;uninstall&quot;" Text="程序和快捷方式已移除。&#10;&#10;教师库、备份、导出结果和设置保留在原存储目录。&#10;确认不再需要后，可自行删除该数据目录。" Transparent="yes" />
         <Control Id="RetainedDataLocation" Type="Text" X="20" Y="180" Width="380" Height="50" Hidden="yes" ShowCondition="JZOPERATION=&quot;uninstall&quot;" Text="数据位置：[JZRETAINEDDATADIR]" Transparent="yes" />
         <Control Id="OpenData" Type="PushButton" X="20" Y="240" Width="130" Height="22" Hidden="yes" ShowCondition="JZOPERATION=&quot;uninstall&quot;" Text="打开数据文件夹">
           <Publish Event="DoAction" Value="OpenRetainedDataFolder" Condition="JZRETAINEDDATADIR" />
@@ -206,12 +210,10 @@
       </Dialog>
       <Dialog Id="FatalError" Width="640" Height="342" Title="安装失败" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="65" Text="安装未完成，请查看日志。" Transparent="yes" />
+        <Control Id="Watermark" Type="Text" X="20" Y="320" Width="220" Height="12" TabSkip="yes" Text="{\WatermarkFont}TaroDeluxe · Codex - Fujita Kotone" Transparent="yes" />
+        <Control Id="Title" Type="Text" X="20" Y="18" Width="380" Height="32" Text="{\TitleFont}操作未完成" Transparent="yes" />
+        <Control Id="Message" Type="Text" X="20" Y="90" Width="380" Height="65" Text="安装未完成，请查看日志。" Transparent="yes" />
         <Control Id="LogLocation" Type="Text" X="20" Y="150" Width="380" Height="70" Text="安装日志：[MsiLogFileLocation]" Transparent="yes" />
-        <Control Id="AdminRetry" Type="PushButton" X="155" Y="240" Width="130" Height="22" Text="管理员模式重试">
-          <Publish Event="DoAction" Value="RestartElevated" Order="1" Condition="1" />
-          <Publish Event="EndDialog" Value="Exit" Order="2" Condition="JZELEVATIONHANDOFF=1" />
-        </Control>
         <Control Id="OpenLog" Type="PushButton" X="20" Y="240" Width="120" Height="22" Text="查看安装日志">
           <Publish Event="DoAction" Value="OpenInstallLog" Condition="MsiLogFileLocation" />
         </Control>
@@ -221,19 +223,18 @@
       </Dialog>
       <Dialog Id="UserExit" Width="640" Height="342" Title="安装已取消" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="100" Text="安装已取消。" Transparent="yes" />
+        <Control Id="Watermark" Type="Text" X="20" Y="320" Width="220" Height="12" TabSkip="yes" Text="{\WatermarkFont}TaroDeluxe · Codex - Fujita Kotone" Transparent="yes" />
+        <Control Id="Title" Type="Text" X="20" Y="18" Width="380" Height="32" Text="{\TitleFont}安装已取消" Transparent="yes" />
+        <Control Id="Message" Type="Text" X="20" Y="90" Width="380" Height="100" Text="安装已取消。" Transparent="yes" />
         <Control Id="Finish" Type="PushButton" X="325" Y="300" Width="75" Height="22" Default="yes" Cancel="yes" Text="关闭">
           <Publish Event="EndDialog" Value="Exit" />
         </Control>
       </Dialog>
       <Dialog Id="UpgradeConfirmDlg" Width="640" Height="342" Title="发现已有版本" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Watermark" Type="Text" X="20" Y="320" Width="220" Height="12" TabSkip="yes" Text="{\WatermarkFont}TaroDeluxe · Codex - Fujita Kotone" Transparent="yes" />
         <Control Id="Title" Type="Text" X="20" Y="24" Width="380" Height="30" Text="{\TitleFont}发现已有版本" Transparent="yes" />
         <Control Id="Message" Type="Text" X="20" Y="90" Width="380" Height="90" Text="已安装 v[JZINSTALLEDVERSION]&#10;是否升级到 v[ProductVersion]？&#10;&#10;教师数据和设置会保留。" Transparent="yes" />
-        <Control Id="AdminRetry" Type="PushButton" X="20" Y="285" Width="130" Height="24" Text="管理员模式重试">
-          <Publish Event="DoAction" Value="RestartElevated" Order="1" Condition="1" />
-          <Publish Event="EndDialog" Value="Exit" Order="2" Condition="JZELEVATIONHANDOFF=1" />
-        </Control>
         <Control Id="Accept" Type="PushButton" X="190" Y="285" Width="125" Height="24" Default="yes" Text="升级">
           <Publish Event="EndDialog" Value="Return" Order="2" Condition="1" />
         </Control>
@@ -243,6 +244,7 @@
       </Dialog>
       <Dialog Id="NewerVersionDlg" Width="640" Height="342" Title="已安装较新版本" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Watermark" Type="Text" X="20" Y="320" Width="220" Height="12" TabSkip="yes" Text="{\WatermarkFont}TaroDeluxe · Codex - Fujita Kotone" Transparent="yes" />
         <Control Id="Title" Type="Text" X="20" Y="24" Width="380" Height="30" Text="{\TitleFont}已安装较新版本" Transparent="yes" />
         <Control Id="Message" Type="Text" X="20" Y="90" Width="380" Height="90" Text="已安装 v[JZINSTALLEDVERSION]，高于本安装包 v[ProductVersion]。&#10;&#10;可进入已安装版本的维护页面修复或卸载。" Transparent="yes" />
         <Control Id="Accept" Type="PushButton" X="190" Y="285" Width="125" Height="24" Default="yes" Text="修复或卸载">
@@ -265,14 +267,15 @@
       <Custom Action="DetectRelatedVersion" After="FindRelatedProducts" />
       <Show Dialog="NewerVersionDlg" Before="LaunchConditions" Condition="WIX_DOWNGRADE_DETECTED" />
       <Show Dialog="UpgradeConfirmDlg" After="CostFinalize" Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
-      <Custom Action="StartInstallActivity" After="DetectRelatedVersion" />
+      <Custom Action="RestartElevated" After="DetectRelatedVersion" Condition="Installed OR WIX_UPGRADE_DETECTED OR WIX_DOWNGRADE_DETECTED" />
+      <Custom Action="StartInstallActivity" After="RestartElevated" />
       <Custom Action="MarkDirectUninstall" Before="MarkUninstallProgress" Condition="REMOVE~=&quot;ALL&quot;" />
       <Custom Action="MarkUninstallProgress" Before="MarkUninstallCompletion" Condition="JZOPERATION=&quot;uninstall&quot;" />
       <Custom Action="MarkUninstallCompletion" Before="CaptureRetainedDataLocation" Condition="JZOPERATION=&quot;uninstall&quot;" />
       <Custom Action="CaptureRetainedDataLocation" Before="ProgressDlg" Condition="JZOPERATION=&quot;uninstall&quot;" />
     </InstallUISequence>
     <Binary Id="MaintenanceHost" SourceFile="build/MaintenanceHost.exe" />
-    <CustomAction Id="RestartElevated" BinaryRef="InstallerUiHelper" DllEntry="RestartElevated" Return="ignore" />
+    <CustomAction Id="RestartElevated" BinaryRef="InstallerUiHelper" DllEntry="RestartElevated" Return="check" />
     <Binary Id="InstallerUiHelper" SourceFile="$(var.UiHelperPath)" />
     <CustomAction Id="StartInstallActivity" BinaryRef="InstallerUiHelper" DllEntry="StartActivity" Return="ignore" />
     <CustomAction Id="DetectRelatedVersion" BinaryRef="InstallerUiHelper" DllEntry="DetectRelatedVersion" Return="check" />

@@ -102,12 +102,14 @@ jobs:
       - run: python tools/verify_preview_ui.py --exe dist/JunZhengMatch.exe --report preview-ui-test.json
       - run: python tools/verify_setup_progress.py
       - run: python tools/verify_installer_errors.py --exe dist/JunZhengMatch.exe --report installer-error-handling-test.json
-      - name: Download Microsoft WebView2 bootstrapper
+      - name: Bundle Microsoft WebView2 offline installer
         shell: pwsh
         run: |
-          Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile dist/MicrosoftEdgeWebview2Setup.exe
-          $signature=Get-AuthenticodeSignature dist/MicrosoftEdgeWebview2Setup.exe
+          Invoke-WebRequest 'https://go.microsoft.com/fwlink/?linkid=2124701' -OutFile dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe
+          if ((Get-Item dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe).Length -lt 30MB) { throw 'Expected full offline runtime, received a bootstrapper' }
+          $signature=Get-AuthenticodeSignature dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') { throw 'WebView2 signature validation failed' }
+          @{status='ok'; offline_installer=$true; microsoft_signature=$true; bytes=(Get-Item dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe).Length; sha256=(Get-FileHash dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe -Algorithm SHA256).Hash} | ConvertTo-Json | Set-Content offline-runtime-test.json
           $env:JZ_CONFIG_DIR=Join-Path $env:RUNNER_TEMP 'jz-desktop-prereq-config'
           $process=Start-Process dist/JunZhengMatch.exe -ArgumentList '--configure-data',"$env:RUNNER_TEMP\jz-desktop-prereq",'--ensure-webview2','--no-open' -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw 'WebView2 setup failed' }
@@ -128,9 +130,9 @@ jobs:
           cmd /c "`"$vcvars`" >nul && cl /nologo /MT /O2 /utf-8 packaging\windows\maintenance_host.c /Fo:build\MaintenanceHost.obj /link /OUT:build\MaintenanceHost.exe /SUBSYSTEM:WINDOWS msi.lib user32.lib advapi32.lib shell32.lib"
           if ($LASTEXITCODE -ne 0) { throw 'Maintenance host build failed' }
           dotnet tool install --global wix --version 5.0.2
-          wix build packaging/windows/installer.wxs -arch x64 -d "Version=$env:APP_VERSION" -d "UiHelperPath=$((Resolve-Path build/InstallerUi.dll).Path)" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "BootstrapperPath=$((Resolve-Path dist/MicrosoftEdgeWebview2Setup.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -o "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi"
+          wix build packaging/windows/installer.wxs -arch x64 -d "Version=$env:APP_VERSION" -d "UiHelperPath=$((Resolve-Path build/InstallerUi.dll).Path)" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "RuntimeInstallerPath=$((Resolve-Path dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -o "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi"
           if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' }
-          wix build packaging/windows/installer.wxs -arch x64 -d "Version=99.0.0" -d "UiHelperPath=$((Resolve-Path build/InstallerUi.dll).Path)" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "BootstrapperPath=$((Resolve-Path dist/MicrosoftEdgeWebview2Setup.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -o "build/newer-version-fixture.msi"
+          wix build packaging/windows/installer.wxs -arch x64 -d "Version=99.0.0" -d "UiHelperPath=$((Resolve-Path build/InstallerUi.dll).Path)" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "RuntimeInstallerPath=$((Resolve-Path dist/MicrosoftEdgeWebView2RuntimeInstallerX64.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -o "build/newer-version-fixture.msi"
           if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' }
           wix msi validate "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -sice ICE20
       - name: Install, verify and uninstall MSI
@@ -141,7 +143,7 @@ jobs:
           gh release download v1.1.1 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir previous
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download upgrade baseline' }
           $previous=(Get-ChildItem previous/*.msi | Select-Object -First 1).FullName
-          gh release download v1.2.1 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir current
+          gh release download v1.2.2 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir current
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download current installed baseline' }
           $current=(Get-ChildItem current/*.msi | Select-Object -First 1).FullName
           ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -PreviousMsi $previous -FutureMsi build/newer-version-fixture.msi -CurrentMsi $current -Report installer-test.json

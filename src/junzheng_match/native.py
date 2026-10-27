@@ -31,8 +31,8 @@ def pick_directory():
     finally:ctypes.windll.ole32.OleUninitialize()
 
 
-def ensure_webview2(interactive=False):
-    if os.name!='nt':return
+def webview2_version():
+    """Read both per-user and per-machine runtime registrations."""
     import winreg
     key=r'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
     for hive in (winreg.HKEY_CURRENT_USER,winreg.HKEY_LOCAL_MACHINE):
@@ -40,17 +40,25 @@ def ensure_webview2(interactive=False):
             try:
                 with winreg.OpenKey(hive,key,0,winreg.KEY_READ|flag) as handle:
                     version=winreg.QueryValueEx(handle,'pv')[0]
-                    if version and version!='0.0.0.0':return
+                    parts=str(version).split('.')
+                    if len(parts)==4 and all(part.isdecimal() for part in parts) and any(int(part) for part in parts):return str(version)
             except OSError:pass
-    installer=Path(sys.executable).parent/'MicrosoftEdgeWebview2Setup.exe'
-    if not installer.exists():raise RuntimeError('未找到WebView2环境，请运行安装包完成依赖安装。')
+    return None
+
+
+def ensure_webview2(interactive=False):
+    if os.name!='nt' or webview2_version():return
+    installer=Path(sys.executable).parent/'MicrosoftEdgeWebView2RuntimeInstallerX64.exe'
+    if not installer.is_file():raise RuntimeError('缺少离线运行组件，请重新运行完整 MSI 安装包修复。')
+    command=[str(installer),'/silent','/install']
     try:
         if interactive:
             from .windows_setup import run_setup
-            run_setup([str(installer),'/install'])
-        else:subprocess.run([str(installer),'/silent','/install'],check=True,timeout=300)
+            run_setup(command)
+        else:subprocess.run(command,check=True,timeout=300)
     except (subprocess.SubprocessError,OSError) as error:
-        raise RuntimeError('运行组件未准备完成，请检查网络后重试。也可重新运行安装包修复。') from error
+        raise RuntimeError('离线运行组件未准备完成，请重新运行安装包修复。') from error
+    if not webview2_version():raise RuntimeError('组件安装后仍未检测到 WebView2，请保留错误信息并重新运行安装包修复。')
 
 
 class DesktopBridge:

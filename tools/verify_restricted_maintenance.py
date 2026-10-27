@@ -128,7 +128,7 @@ def main(msi):
     account_created=False;runner_installed=False;policy=None;old_policy=None
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
         disk=Path(temp)/'maintenance.vhd';script=Path(temp)/'diskpart.txt'
-        script.write_text(f'create vdisk file="{disk}" maximum=256 type=expandable\nselect vdisk file="{disk}"\nattach vdisk\ncreate partition primary\nformat fs=ntfs quick\nassign letter={letter}\n',encoding='ascii')
+        script.write_text(f'create vdisk file="{disk}" maximum=2048 type=expandable\nselect vdisk file="{disk}"\nattach vdisk\ncreate partition primary\nformat fs=ntfs quick\nassign letter={letter}\n',encoding='ascii')
         result=subprocess.run(['diskpart','/s',str(script)],capture_output=True,timeout=60)
         assert root.exists(),result.stdout.decode(errors='replace')
         try:
@@ -174,7 +174,7 @@ def main(msi):
             host=str(Path('build/MaintenanceHost.exe').resolve())
             install(root/'package.msi',root/'runner-program',root/'runner-data',root/'runner-repair.log',maintenance=True,no_properties=True,admin_host=host)
             assert hashlib.sha256((root/'runner-program/JunZhengMatch.exe').read_bytes()).digest()==hashlib.sha256((root/'reference.exe').read_bytes()).digest()
-            install(root/'package.msi',root/'runner-program',root/'runner-data',root/'runner-uninstall.log',maintenance=True,remove=True,no_properties=True,admin_host=host)
+            install(root/'package.msi',root/'runner-program',root/'runner-data',root/'runner-uninstall.log',direct_uninstall=True,no_properties=True,admin_host=host)
             runner_installed=False
             assert not (root/'runner-program/JunZhengMatch.exe').exists()
             report.update(real_standard_account=True,same_user_admin_retry_succeeded=True,other_account_rejected=True,data_preserved=True,isolated_secondary_volume=True)

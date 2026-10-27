@@ -32,11 +32,13 @@ Windows 独立窗口另安装 `packaging/requirements-desktop.txt`，运行 `pyt
 
 ```bash
 python -m pip install -r packaging/requirements-dev.txt
-python tools/build_version.py --version v1.2.2
+python tools/build_version.py --version v1.2.3
 pyinstaller --clean --noconfirm packaging/JunZhengMatch.spec
 ```
 
 详细使用见 [WINDOWS.md](WINDOWS.md)，自行上传和发布见 [RELEASING.md](RELEASING.md)。
+
+MSI 内含 WebView2 完整离线组件，缺少时本地安装，已有时跳过。升级、修复或卸载需要授权时，点击 Windows 提示中的“是”即可。
 
 ## Docker
 
