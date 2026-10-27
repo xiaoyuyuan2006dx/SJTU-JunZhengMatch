@@ -189,8 +189,10 @@ try {
   Invoke-Wizard $errorMsi $customApp $customData 'error-fixture-install' -EditPaths
   $installed=$true;$exe=Assert-Program $customApp
   $errorHash=Mark-Data $customData
+  $programHash=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
   Invoke-Wizard $errorMsi $customApp $customData 'error-fixture-uninstall' -Maintenance -Remove -ExpectError
   $exe=Assert-Program $customApp
+  if ((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash -ne $programHash) { throw 'Uninstall rollback did not restore the complete program' }
   Assert-Data $customData $errorHash
   $cases+='permission_error_dialog_without_2814'
   $cases+='failed_uninstall_rolls_back_program_and_keeps_data'

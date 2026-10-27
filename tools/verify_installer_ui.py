@@ -131,7 +131,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                     # /x uses Windows' own confirmation/basic progress UI.
                     # Its transient preparation window is not a second prompt.
                     if 'confirm' in seen and not any(code in texts for code in ('1926','2753','2814')):
-                        if 'preparing to remove' in texts.lower() or 'Cancel' in [text.replace('&','') for _,text in windows(hwnd)]:
+                        if 'preparing to remove' in texts.lower() or any(text.replace('&','') in ('Cancel','取消') for _,text in windows(hwnd)):
                             continue
                     if 'are you sure you want to uninstall' not in texts.lower() and '确定要卸载' not in texts:
                         raise RuntimeError('Unexpected Windows uninstall prompt: '+texts)
