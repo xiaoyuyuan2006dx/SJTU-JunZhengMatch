@@ -20,6 +20,7 @@
     <SetProperty Id="JZDATADIR" Action="UsePreviousDataDir" Value="[PREVIOUSJZDATADIR]" Before="UseDefaultDataDir" Sequence="both" Condition="NOT JZDATADIR AND PREVIOUSJZDATADIR" />
     <SetProperty Id="JZDATADIR" Action="UseDefaultDataDir" Value="[%USERPROFILE]\JunZhenMatch" Before="CostInitialize" Sequence="both" Condition="NOT JZDATADIR" />
     <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="JZDATADIR" Name="JunZhenMatchData" />
       <Directory Id="ProgramsFolder" Name="Programs">
         <Directory Id="INSTALLFOLDER" Name="JunZhenMatch">
           <Component Id="AppFiles" Guid="F833CD4F-49D1-4216-B2F3-3222CF2A21E7">
@@ -56,9 +57,11 @@
     <CustomAction Id="ConfigureStorage" FileRef="MainExe" ExeCommand="--configure-data &quot;[JZDATADIR]\.&quot; --no-open" Execute="deferred" Impersonate="yes" Return="check" />
     <CustomAction Id="PreserveStorageOnRepair" FileRef="MainExe" ExeCommand="--configure-data &quot;[JZDATADIR]\.&quot; --keep-existing-settings --no-open" Execute="deferred" Impersonate="yes" Return="check" />
     <CustomAction Id="RequireLocalPayload" Error="程序文件没有被选中安装，本次操作未完成。请重新打开安装包，选择安装或修复安装。" />
+    <CustomAction Id="RejectInvalidDataLocation" Error="数据目录不能与程序安装目录相同，也不能放在程序目录里面。请选择两个分开的文件夹，例如程序放在D:\Apps\JunZhenMatch，数据放在D:\JunZhenMatchData。" />
     <CustomAction Id="OpenProgramFolder" Directory="WindowsFolder" ExeCommand="&quot;[WindowsFolder]explorer.exe&quot; &quot;[INSTALLFOLDER].&quot;" Return="asyncNoWait" />
     <CustomAction Id="OpenInstallLog" Directory="WindowsFolder" ExeCommand="&quot;[WindowsFolder]explorer.exe&quot; /select,&quot;[MsiLogFileLocation]&quot;" Return="asyncNoWait" />
     <InstallExecuteSequence>
+      <Custom Action="RejectInvalidDataLocation" Before="RequireLocalPayload" Condition="NOT Installed AND NOT REMOVE AND (JZDATADIR ~&lt;&lt; INSTALLFOLDER)" />
       <Custom Action="RequireLocalPayload" Before="InstallInitialize" Condition="NOT REMOVE AND NOT ($AppFiles=3 OR ?AppFiles=3)" />
       <Custom Action="ConfigureStorage" Before="PreserveStorageOnRepair" Condition="NOT Installed AND NOT REMOVE~=&quot;ALL&quot; AND $AppFiles=3" />
       <Custom Action="PreserveStorageOnRepair" Before="InstallFinalize" Condition="Installed AND NOT REMOVE~=&quot;ALL&quot; AND $AppFiles=3" />
@@ -75,15 +78,23 @@
         <Control Id="ProgramLabel" Type="Text" X="20" Y="98" Width="380" Height="17" Text="程序安装位置：" />
         <Control Id="ProgramPath" Type="PathEdit" X="20" Y="118" Width="380" Height="20" Property="INSTALLFOLDER" />
         <Control Id="DataLabel" Type="Text" X="20" Y="153" Width="380" Height="17" Text="数据存储位置（不存在时自动创建）：" />
-        <Control Id="DataPath" Type="Edit" X="20" Y="173" Width="380" Height="20" Property="JZDATADIR" />
-        <Control Id="Hint" Type="Text" X="20" Y="203" Width="380" Height="27" Text="可输入其他文件夹的完整路径，之后可在偏好设置中迁移。缺少WebView2时，首次启动会打开微软安装窗口；此安装步骤不下载环境。" />
+        <Control Id="DataPath" Type="PathEdit" X="20" Y="173" Width="380" Height="20" Property="JZDATADIR" />
+        <Control Id="Hint" Type="Text" X="20" Y="203" Width="380" Height="45" Text="程序和数据请选择分开的文件夹，数据不能放在程序目录里面。缺少WebView2时，首次启动会打开微软安装窗口；此安装步骤不下载环境。" />
         <Control Id="Install" Type="PushButton" X="245" Y="300" Width="75" Height="22" Default="yes" Text="安装">
           <Publish Event="SetTargetPath" Value="INSTALLFOLDER" Order="1" Condition="1" />
-          <Publish Event="AddLocal" Value="ALL" Order="2" Condition="1" />
-          <Publish Event="EndDialog" Value="Return" Order="3" Condition="JZDATADIR" />
+          <Publish Event="SetTargetPath" Value="JZDATADIR" Order="2" Condition="1" />
+          <Publish Event="SpawnDialog" Value="InvalidStorageDlg" Order="3" Condition="JZDATADIR ~&lt;&lt; INSTALLFOLDER" />
+          <Publish Event="AddLocal" Value="ALL" Order="4" Condition="JZDATADIR AND NOT (JZDATADIR ~&lt;&lt; INSTALLFOLDER)" />
+          <Publish Event="EndDialog" Value="Return" Order="5" Condition="JZDATADIR AND NOT (JZDATADIR ~&lt;&lt; INSTALLFOLDER)" />
         </Control>
         <Control Id="Cancel" Type="PushButton" X="327" Y="300" Width="73" Height="22" Cancel="yes" Text="取消">
           <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+      </Dialog>
+      <Dialog Id="InvalidStorageDlg" Width="380" Height="155" Title="请调整数据目录" NoMinimize="yes">
+        <Control Id="Message" Type="Text" X="20" Y="20" Width="340" Height="85" Text="数据目录不能与程序安装目录相同，也不能放在程序目录里面。请返回修改。&#13;&#10;&#13;&#10;例如：程序放在D:\Apps\JunZhenMatch，数据放在D:\JunZhenMatchData。" />
+        <Control Id="Back" Type="PushButton" X="245" Y="118" Width="110" Height="22" Default="yes" Cancel="yes" Text="返回修改">
+          <Publish Event="EndDialog" Value="Return" />
         </Control>
       </Dialog>
       <Dialog Id="MaintenanceDlg" Width="640" Height="342" Title="JunZhenMatch 维护" NoMinimize="yes">

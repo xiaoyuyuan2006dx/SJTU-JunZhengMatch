@@ -89,7 +89,8 @@ def main():
         from .native import open_desktop
         return open_desktop(instance,folder,args.report if args.desktop_smoke else None)
     if args.report:Path(args.report).write_text(json.dumps(instance),encoding='utf-8')
-    webbrowser.open(instance['url'])
+    if not webbrowser.open(instance['url']):
+        raise RuntimeError('后台已启动，但系统未能打开默认浏览器。请在浏览器地址栏输入：\n'+instance['url'])
 
 
 def launch():

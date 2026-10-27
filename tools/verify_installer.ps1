@@ -26,14 +26,23 @@ function Invoke-Quiet($package,$operation,$name,$extra=@()) {
     throw "MSI $name failed: $($process.ExitCode)"
   }
 }
-function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog) {
+function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog,[switch]$RejectPaths) {
   $arguments=@('tools/verify_installer_ui.py','--msi',$package,'--app',$app,'--data',$data,'--log',(Join-Path $root ($name+'.log')),'--no-properties')
   if ($Maintenance) {$arguments+='--maintenance'}
   if ($EditPaths) {$arguments+='--edit-paths'}
   if ($Remove) {$arguments+='--remove'}
   if ($AutomaticLog) {$arguments+='--automatic-log'}
+  if ($RejectPaths) {$arguments+='--reject-paths'}
   & python @arguments
   if ($LASTEXITCODE -ne 0) { throw "Visible MSI $name failed" }
+}
+function Assert-RejectedQuiet($package,$app,$data,$name) {
+  $log=Join-Path $root ($name+'.log')
+  $arguments=@('/i',('"'+$package+'"'),'/qn','/norestart',('INSTALLFOLDER="'+$app+'"'),('JZDATADIR="'+$data+'"'),'/L*v',('"'+$log+'"'))
+  $process=Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru
+  if ($process.ExitCode -ne 1603) { throw 'Quiet invalid storage path was not rejected' }
+  $text=Get-Content -LiteralPath $log -Raw
+  if ($text -notmatch 'RejectInvalidDataLocation' -or $text -match 'Executing op: CustomActionSchedule\(Action=ConfigureStorage') { throw 'Invalid storage validation ran too late' }
 }
 function Assert-Program($app) {
   $exe=Join-Path $app 'JunZhengMatch.exe'
@@ -68,6 +77,16 @@ try {
   # JZDATADIR, ADDLOCAL or REINSTALL properties are injected into the MSI.
   if (Test-Path (Join-Path $defaultApp 'JunZhengMatch.exe')) { throw 'Windows test machine is not clean' }
   if (Test-Path $configPath) { throw 'Default user preferences are not clean before first install' }
+  foreach ($kind in @('same','nested')) {
+    $badApp=Join-Path $root ('invalid-'+$kind)
+    $badData=if ($kind -eq 'same') {$badApp} else {Join-Path $badApp 'data'}
+    Invoke-Wizard $msiPath $badApp $badData ('reject-'+$kind) -EditPaths -RejectPaths
+    if (Test-Path (Join-Path $badApp 'JunZhengMatch.exe')) { throw 'Invalid directory choice copied program files' }
+    if (Test-Path $configPath) { throw 'Invalid directory choice changed user configuration' }
+    Assert-RejectedQuiet $msiPath $badApp $badData ('quiet-reject-'+$kind)
+    if (Test-Path $configPath) { throw 'Quiet invalid directory choice changed user configuration' }
+    $cases+=('reject_'+$kind+'_data_before_install')
+  }
   Invoke-Wizard $msiPath $defaultApp $defaultData 'fresh-default' -AutomaticLog
   $installed=$true;$exe=Assert-Program $defaultApp
   Assert-DataPath $defaultData
@@ -120,6 +139,11 @@ try {
     $previousInstalled=$true
     $legacyEmpty=!(Test-Path (Join-Path $previousApp 'JunZhengMatch.exe'))
     if (!$legacyEmpty) { throw 'Legacy registration case unexpectedly installed an EXE' }
+    $invalidUpgrade=Join-Path $root 'Invalid upgrade'
+    Assert-RejectedQuiet $msiPath $invalidUpgrade $invalidUpgrade 'reject-upgrade-before-removal'
+    $null=$installer.ProductInfo($legacyCode,'VersionString')
+    Assert-Data $previousData $legacyHash
+    $cases+='invalid_upgrade_preserves_existing_registration'
     $app=Join-Path $root 'Recovered program'
     $data=$previousData
     Invoke-Wizard $msiPath $app $data 'recover-empty-upgrade' -EditPaths

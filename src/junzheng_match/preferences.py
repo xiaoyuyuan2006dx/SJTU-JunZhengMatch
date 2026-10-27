@@ -63,7 +63,7 @@ def prepare_folder(folder):
     folder=Path(folder).expanduser().resolve()
     program=Path(__import__('sys').executable).parent if getattr(__import__('sys'),'frozen',False) else paths.RESOURCE_ROOT
     if folder==paths.RESOURCE_ROOT or paths.RESOURCE_ROOT in folder.parents or folder==program or program in folder.parents:
-        raise ValueError('请选择程序目录之外的用户数据位置。')
+        raise ValueError('数据目录不能与程序安装目录相同，也不能放在程序目录里面。请选择两个分开的文件夹。')
     folder.mkdir(parents=True,exist_ok=True)
     test=folder/('.write-test-'+secrets.token_hex(4))
     try:test.write_text('ok');test.unlink()

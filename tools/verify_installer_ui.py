@@ -12,7 +12,7 @@ sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
-def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False):
+def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -94,7 +94,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                         if text.startswith('安装日志：') and text[len('安装日志：'):].strip():discovered_log=Path(text[len('安装日志：'):].strip())
                 button=None
                 if title=='JunZhenMatch 安装':
-                    button='安装';seen.add('setup')
+                    button='取消' if reject_paths and 'invalid' in seen else '安装';seen.add('setup')
                     if edit_paths and not paths_edited:
                         edits=[];controls=[]
                         for child,text in windows(hwnd):
@@ -110,8 +110,10 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                             type_path(hwnd,child,value)
                         paths_edited=True
                         time.sleep(.3)
+                elif title=='请调整数据目录':button='返回修改';seen.add('invalid')
                 elif title=='JunZhenMatch 维护':button='卸载程序' if remove else '修复安装';seen.add('maintenance')
                 elif title in ('安装完成','操作完成'):button='完成';seen.add('complete')
+                elif title=='安装已取消' and reject_paths:button='关闭';seen.add('cancelled')
                 elif title in ('安装失败','安装已取消'):button='关闭';errors.append(title)
                 elif title=='JunZhenMatch':
                     texts=' '.join(text for _,text in windows(hwnd))
@@ -125,6 +127,9 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
         if automatic_log:
             if not discovered_log or not discovered_log.exists():raise RuntimeError('Automatic MSI log path is missing from completion/failure page')
             shutil.copyfile(discovered_log,log)
+        if reject_paths:
+            if process.returncode!=1602 or errors or seen!={'setup','invalid','cancelled'}:raise RuntimeError(f'Invalid path was not rejected before installation: {process.returncode}; {seen}; {errors}')
+            return
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
         expected={'maintenance','complete'} if maintenance else {'setup','complete'}
         if seen!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
@@ -133,5 +138,5 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');parser.add_argument('--no-properties',action='store_true');parser.add_argument('--edit-paths',action='store_true');parser.add_argument('--remove',action='store_true');parser.add_argument('--automatic-log',action='store_true');args=parser.parse_args()
-    install(args.msi,args.app,args.data,args.log,args.maintenance,args.no_properties,args.edit_paths,args.remove,args.automatic_log)
+    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');parser.add_argument('--no-properties',action='store_true');parser.add_argument('--edit-paths',action='store_true');parser.add_argument('--remove',action='store_true');parser.add_argument('--automatic-log',action='store_true');parser.add_argument('--reject-paths',action='store_true');args=parser.parse_args()
+    install(args.msi,args.app,args.data,args.log,args.maintenance,args.no_properties,args.edit_paths,args.remove,args.automatic_log,args.reject_paths)
