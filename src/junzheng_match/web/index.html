@@ -118,7 +118,7 @@
       </div>
 
       <!-- 匹配结果预览卡片 -->
-      <div class="card match-result-card">
+      <div class="card match-result-card" id="match-result-card">
         <div class="card-header">
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             <div class="card-title">匹配结果预览</div>
@@ -132,6 +132,7 @@
           </div>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <button class="preview-fold" id="btn-fold-preview" type="button" aria-label="收起预览" aria-expanded="true" aria-controls="match-preview-content" onclick="togglePreviewCollapsed()" title="收起预览"><svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="m6 15 6-6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
             <button class="btn btn-sm" id="btn-toggle-view" onclick="togglePreviewMode()" disabled>
               视图：合并单元格 ⇄ 横式单行
             </button>
@@ -145,6 +146,7 @@
         </div>
 
         <!-- 固定内嵌表格（无任何内部横向或纵向滚动条） -->
+        <div id="match-preview-content">
         <div class="table-wrap" id="match-preview-wrap">
           <div style="padding:48px 24px;text-align:center;color:var(--ink-muted);">
             <div style="font-size:14px;color:var(--ink-secondary);margin-bottom:4px;">上传课题表后即可在此分页预览匹配详情</div>
@@ -156,6 +158,7 @@
         <div class="pagination-bar" id="match-pagination-bar" style="display:none;">
           <div id="match-page-info">共 0 名学生</div>
           <div class="page-btn-group" id="match-page-btns"></div>
+        </div>
         </div>
       </div>
     </section>

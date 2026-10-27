@@ -421,6 +421,22 @@ function collectMatchParams() {
   return params;
 }
 
+function setPreviewCollapsed(collapsed) {
+  const card=document.getElementById('match-result-card');
+  const button=document.getElementById('btn-fold-preview');
+  const content=document.getElementById('match-preview-content');
+  if(!card||!button||!content)return;
+  card.classList.toggle('is-collapsed',collapsed);
+  content.hidden=collapsed;
+  button.setAttribute('aria-expanded',String(!collapsed));
+  button.setAttribute('aria-label',collapsed?'展开预览':'收起预览');
+  button.title=collapsed?'展开预览':'收起预览';
+  if(!collapsed&&currentMatchData)requestAnimationFrame(()=>renderMatchPreviewTable());
+}
+function togglePreviewCollapsed() {
+  setPreviewCollapsed(!document.getElementById('match-preview-content').hidden);
+}
+
 async function runMatch(useSample = false) {
   if (!useSample && !currentMatchFileBase64) {
     alert("请先上传学生课题表（.xlsx 或 .csv），或点击「载入示例表」！");
@@ -430,6 +446,7 @@ async function runMatch(useSample = false) {
   const btn = document.getElementById("btn-run-match");
   const wrap = document.getElementById("match-preview-wrap");
   document.getElementById("page-match").classList.remove("is-empty");
+  setPreviewCollapsed(false);
   btn.disabled = true;
   btn.textContent = "匹配计算中...";
   wrap.innerHTML = `<div style="padding:48px 20px;text-align:center;color:var(--ink-secondary);">正在运行 TF-IDF 学科扩展匹配引擎，请稍候...</div>`;

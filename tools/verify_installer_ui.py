@@ -2,6 +2,7 @@
 import argparse
 import ctypes
 import json
+import re
 from ctypes import wintypes as w
 from pathlib import Path
 import subprocess
@@ -13,7 +14,7 @@ sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
-def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False):
+def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False,cancel_upgrade=False,expect_newer=False):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -67,11 +68,11 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
         buffer=ctypes.create_unicode_buffer(32768)
         user.SendMessageW(hwnd,0x000D,len(buffer),ctypes.cast(buffer,ctypes.c_void_p).value)
         return buffer.value
-    def windows(parent=None):
+    def windows(parent=None,include_hidden=False):
         found=[]
         @callback
         def collect(hwnd,_):
-            if user.IsWindowVisible(hwnd):found.append((hwnd,caption(hwnd)))
+            if include_hidden or user.IsWindowVisible(hwnd):found.append((hwnd,caption(hwnd)))
             return True
         if parent:user.EnumChildWindows(parent,collect,0)
         else:user.EnumWindows(collect,0)
@@ -87,7 +88,14 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     paths_edited=False
     edit_wait_started=None
     discovered_log=None
-    stages=set();positions=set()
+    stages=set();positions=set();activity_frames=set();upgrade_text=''
+    screenshots=Path('installer-ui-preview');screenshots.mkdir(exist_ok=True)
+    def capture(hwnd,name):
+        path=screenshots/(name+'.png')
+        if path.exists():return
+        from PIL import ImageGrab
+        rect=w.RECT();user.GetWindowRect(hwnd,ctypes.byref(rect))
+        ImageGrab.grab(bbox=(rect.left,rect.top,rect.right,rect.bottom)).save(path)
     try:
         while process.poll() is None and time.monotonic()<deadline:
             for hwnd,title in windows():
@@ -96,11 +104,17 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                         if text in {'正在检查安装条件','正在复制程序文件','正在创建快捷方式','正在写入安装信息','正在保存数据位置','正在保留原有设置','正在移除旧版本','正在卸载程序文件','正在完成安装'}:stages.add(text)
                         name=ctypes.create_unicode_buffer(128);user.GetClassNameW(child,name,128)
                         if 'progress' in name.value.lower():positions.add(user.SendMessageW(child,0x0408,0,0))
+                        if name.value=='JZInstallerActivity':
+                            value=re.search(r'frames=(\d+)',text)
+                            if value:
+                                activity_frames.add(int(value[1]))
+                                if len(activity_frames)>=2:capture(hwnd,'progress')
                 if title in ('操作完成','安装失败'):
-                    for _,text in windows(hwnd):
+                    for _,text in windows(hwnd,include_hidden=True):
                         if text.startswith('安装日志：') and text[len('安装日志：'):].strip():discovered_log=Path(text[len('安装日志：'):].strip())
                 button=None
                 if title=='JunZhenMatch 安装':
+                    capture(hwnd,'setup')
                     button='取消' if reject_paths and 'invalid' in seen else '安装';seen.add('setup')
                     if edit_paths and not paths_edited:
                         edits=[];controls=[]
@@ -118,12 +132,19 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                         paths_edited=True
                         time.sleep(.3)
                 elif title=='请调整数据目录':button='返回修改';seen.add('invalid')
+                elif title=='发现已有版本':
+                    capture(hwnd,'upgrade');seen.add('upgrade');button='取消' if cancel_upgrade else '升级'
+                    upgrade_text=' '.join(text for _,text in windows(hwnd))
+                    if '是否升级到 v' not in upgrade_text:raise RuntimeError('Upgrade versions were not displayed')
+                elif title=='已安装较新版本':
+                    capture(hwnd,'newer');seen.add('newer');button='取消'
+                    if not expect_newer:errors.append('Unexpected newer version dialog')
                 elif title=='JunZhenMatch 安装错误':
                     errors.append(' '.join(text for _,text in windows(hwnd)))
                     button='确定'
-                elif title=='JunZhenMatch 维护':button='卸载程序' if remove else '修复安装';seen.add('maintenance')
-                elif title in ('安装完成','操作完成'):button='完成';seen.add('complete')
-                elif title=='安装已取消' and reject_paths:button='关闭';seen.add('cancelled')
+                elif title=='JunZhenMatch 维护':capture(hwnd,'maintenance');button='卸载程序' if remove else '修复安装';seen.add('maintenance')
+                elif title in ('安装完成','操作完成'):capture(hwnd,'complete');button='完成';seen.add('complete')
+                elif title=='安装已取消' and (reject_paths or cancel_upgrade or expect_newer):button='关闭';seen.add('cancelled')
                 elif title in ('安装失败','安装已取消'):button='关闭';errors.append(title)
                 elif title=='JunZhenMatch':
                     texts=' '.join(text for _,text in windows(hwnd))
@@ -140,14 +161,20 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
         if reject_paths:
             if process.returncode!=1602 or errors or seen!={'setup','invalid','cancelled'}:raise RuntimeError(f'Invalid path was not rejected before installation: {process.returncode}; {seen}; {errors}')
             return
+        if cancel_upgrade or expect_newer:
+            expected={'cancelled','newer' if expect_newer else 'upgrade'}
+            if process.returncode!=1602 or errors or seen!=expected:raise RuntimeError(f'Version confirmation did not cancel cleanly: {process.returncode}; {seen}; {errors}')
+            return
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
         expected={'maintenance','complete'} if maintenance else {'setup','complete'}
-        if seen!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
-        Path(log).with_suffix('.progress.json').write_text(json.dumps(dict(status='ok',stages=sorted(stages),positions=sorted(positions)),ensure_ascii=False),encoding='utf-8')
+        if seen-{'upgrade'}!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
+        Path(log).with_suffix('.progress.json').write_text(json.dumps(dict(status='ok',stages=sorted(stages),positions=sorted(positions),activity_frames=sorted(activity_frames),upgrade_text=upgrade_text),ensure_ascii=False),encoding='utf-8')
     finally:
         if process.poll() is None:process.kill()
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');parser.add_argument('--no-properties',action='store_true');parser.add_argument('--edit-paths',action='store_true');parser.add_argument('--remove',action='store_true');parser.add_argument('--automatic-log',action='store_true');parser.add_argument('--reject-paths',action='store_true');args=parser.parse_args()
-    install(args.msi,args.app,args.data,args.log,args.maintenance,args.no_properties,args.edit_paths,args.remove,args.automatic_log,args.reject_paths)
+    parser=argparse.ArgumentParser()
+    for name in ('msi','app','data','log'):parser.add_argument('--'+name,required=True)
+    for name in ('maintenance','no-properties','edit-paths','remove','automatic-log','reject-paths','cancel-upgrade','expect-newer'):parser.add_argument('--'+name,action='store_true')
+    install(**vars(parser.parse_args()))

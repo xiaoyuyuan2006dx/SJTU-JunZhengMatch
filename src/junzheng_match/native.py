@@ -50,7 +50,7 @@ def ensure_webview2(interactive=False):
             run_setup([str(installer),'/install'])
         else:subprocess.run([str(installer),'/silent','/install'],check=True,timeout=300)
     except (subprocess.SubprocessError,OSError) as error:
-        raise RuntimeError('WebView2安装未完成，请检查网络后重新打开程序。也可从程序安装目录运行MicrosoftEdgeWebview2Setup.exe，或用JunZhengMatch.exe在浏览器操作。') from error
+        raise RuntimeError('运行组件未准备完成，请检查网络后重试。也可重新运行安装包修复。') from error
 
 
 class DesktopBridge:
@@ -90,7 +90,7 @@ def open_desktop(instance,profile,smoke_report=None):
     webview.settings['ALLOW_FILE_URLS']=False
     bridge=DesktopBridge()
     if diagnostic:diagnostic.write('Creating window\n')
-    window=webview.create_window('䇹政导师匹配',instance['url']+'/?interface=desktop',js_api=bridge,width=1320,height=900,min_size=(850,600),background_color='#fffdf9')
+    window=webview.create_window('䇹政导师匹配',instance['url']+'/?interface=desktop',js_api=bridge,width=1320,height=900,min_size=(850,600),maximized=True,background_color='#fffdf9')
     bridge._window=window
     result={}
     if smoke_report:
@@ -104,6 +104,10 @@ def open_desktop(instance,profile,smoke_report=None):
                 else:raise RuntimeError('独立窗口页面加载超时。')
                 check=window.evaluate_js("({title:document.title,preferences:!!document.getElementById('page-preferences'),bridge:!!window.pywebview.api})")
                 if not check.get('preferences') or not check.get('bridge'):raise RuntimeError('独立窗口未加载设置页面或本机桥接。')
+                if os.name=='nt':
+                    import ctypes
+                    user=ctypes.windll.user32;user.FindWindowW.restype=ctypes.c_void_p;user.FindWindowW.argtypes=[ctypes.c_wchar_p,ctypes.c_wchar_p];user.IsZoomed.argtypes=[ctypes.c_void_p]
+                    if not user.IsZoomed(user.FindWindowW(None,'䇹政导师匹配')):raise RuntimeError('独立窗口未默认最大化。')
                 result.update(status='ok',native_window=True,webview_bridge=True,preferences_page=True,instance_id=instance['instance_id'])
             except Exception as error:result.update(status='error',error=str(error))
             finally:window.destroy()

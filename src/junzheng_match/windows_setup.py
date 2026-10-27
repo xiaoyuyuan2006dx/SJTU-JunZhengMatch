@@ -36,7 +36,7 @@ def run_setup(command,timeout=300):
     if not window:return subprocess.run(command,check=True,timeout=timeout)
     labels=[]
     try:
-        labels.append(user.CreateWindowExW(0,'STATIC','正在下载并安装 Microsoft WebView2\r\n通常约1–3分钟；网络较慢时最多等待5分钟。\r\n微软安装窗口显示下载进度，完成后自动打开程序。',0x50000000,22,18,570,65,window,None,None,None))
+        labels.append(user.CreateWindowExW(0,'STATIC','正在准备独立窗口所需的运行组件\r\n首次运行可能需要联网，通常约1–3分钟。\r\n准备完成后将打开程序。',0x50000000,22,18,570,65,window,None,None,None))
         bar=user.CreateWindowExW(0,'msctls_progress32','',0x50000008,22,96,570,18,window,None,None,None)
         user.SendMessageW(bar,0x040A,1,30)
         status=user.CreateWindowExW(0,'STATIC',progress_text(0,timeout),0x50000000,22,130,570,35,window,None,None,None)

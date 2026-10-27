@@ -8,6 +8,12 @@ from junzheng_match import entrypoint
 
 
 class BrowserLaunchTests(unittest.TestCase):
+    def test_msi_marker_selects_desktop_and_portable_keeps_browser(self):
+        from junzheng_match import native
+        for installed in (True,False):
+            with self.subTest(installed=installed),mock.patch.object(entrypoint.sys,'argv',['app']),mock.patch.object(entrypoint.sys,'frozen',True,create=True),mock.patch.object(Path,'is_file',return_value=installed),mock.patch.object(entrypoint.preferences,'PreferenceStore'),mock.patch.object(entrypoint.preferences,'prepare_folder',return_value=Path('/test-data')),mock.patch.object(entrypoint.runtime,'ensure_backend',return_value={'url':'http://127.0.0.1:8765'}),mock.patch.object(native,'ensure_webview2'),mock.patch.object(native,'open_desktop') as desktop,mock.patch.object(entrypoint.webbrowser,'open',return_value=True) as browser,mock.patch.dict(entrypoint.os.environ,{},clear=True):
+                entrypoint.main()
+                self.assertEqual(desktop.called,installed);self.assertEqual(browser.called,not installed)
     def test_missing_default_browser_has_a_visible_url_error(self):
         store=mock.MagicMock()
         with mock.patch.object(entrypoint.sys,'argv',['app']),mock.patch.object(entrypoint.preferences,'PreferenceStore',return_value=store),mock.patch.object(entrypoint.preferences,'prepare_folder',return_value=Path('/test-data')),mock.patch.object(entrypoint.runtime,'ensure_backend',return_value={'url':'http://127.0.0.1:8765'}),mock.patch.object(entrypoint.webbrowser,'open',return_value=False),mock.patch.dict(entrypoint.os.environ,{},clear=True):

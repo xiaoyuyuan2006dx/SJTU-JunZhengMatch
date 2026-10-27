@@ -1,16 +1,15 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="JunZhenMatch" Manufacturer="xiaoyuyuan2006dx" Version="$(var.Version)" UpgradeCode="4BBF6F5A-0C4D-4F1C-9F3C-6CA82C89C31F" Language="2052" Scope="perUser" Codepage="65001">
-    <MajorUpgrade MigrateFeatures="no" Schedule="afterInstallInitialize" DowngradeErrorMessage="已安装更新版本，请先卸载再安装旧版。" />
+    <MajorUpgrade MigrateFeatures="no" Schedule="afterInstallInitialize" DowngradeErrorMessage="已安装较新版本，请在该版本维护页面中修复或卸载。" />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="AppIcon" SourceFile="$(var.IconPath)" />
-    <Binary Id="InstallerArtwork" SourceFile="assets/installer-art.bmp" />
+    <Binary Id="InstallerArtwork" SourceFile="build/installer-background.bmp" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch" />
     <Property Id="JZDATADIR" Secure="yes" />
     <Property Id="INSTALLFOLDER" Secure="yes" />
     <Property Id="MsiLogging" Value="voicewarmupx" />
     <StandardDirectory Id="WindowsFolder" />
-    <!-- A logical path for validation, not an MSI-owned data component. -->
     <StandardDirectory Id="TARGETDIR">
       <Directory Id="JZDATADIR" Name="JunZhenMatchData" />
     </StandardDirectory>
@@ -33,6 +32,7 @@
             <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
             <RemoveFolder Id="RemoveAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
             <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsFolder" On="uninstall" />
+            <File Id="DesktopMode" SourceFile="packaging/windows/desktop-mode" />
           </Component>
         </Directory>
       </Directory>
@@ -80,19 +80,19 @@
       <ProgressText Action="RemoveExistingProducts" Message="正在移除旧版本" />
       <ProgressText Action="RemoveFiles" Template="[1]" Message="正在卸载程序文件" />
       <ProgressText Action="InstallFinalize" Message="正在完成安装" />
-      <TextStyle Id="DefaultFont" FaceName="Microsoft YaHei UI" Size="9" />
-      <TextStyle Id="TitleFont" FaceName="Microsoft YaHei UI" Size="15" Bold="yes" />
+      <TextStyle Id="DefaultFont" FaceName="Microsoft YaHei UI" Size="9" Red="91" Green="83" Blue="99" />
+      <TextStyle Id="TitleFont" FaceName="Microsoft YaHei UI" Size="15" Bold="yes" Red="124" Green="90" Blue="128" />
       <Property Id="DefaultUIFont" Value="DefaultFont" />
       <Dialog Id="StorageSetupDlg" Width="640" Height="342" Title="JunZhenMatch 安装" NoMinimize="yes">
-        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Title" Type="Text" X="20" Y="18" Width="280" Height="30" Text="{\TitleFont}䇹政导师匹配" />
-        <Control Id="Version" Type="Text" X="310" Y="24" Width="90" Height="18" Text="v[ProductVersion]" />
-        <Control Id="Intro" Type="Text" X="20" Y="55" Width="380" Height="30" Text="安装后以独立窗口运行。程序与数据分开存放，升级或卸载默认保留教师数据。" />
-        <Control Id="ProgramLabel" Type="Text" X="20" Y="98" Width="380" Height="17" Text="程序安装位置：" />
+        <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Title" Type="Text" X="20" Y="18" Width="280" Height="30" Text="{\TitleFont}安装䇹政导师匹配" Transparent="yes" />
+        <Control Id="Version" Type="Text" X="310" Y="24" Width="90" Height="18" Text="v[ProductVersion]" Transparent="yes" />
+        <Control Id="Intro" Type="Text" X="20" Y="55" Width="380" Height="30" Text="选择程序和数据的位置。" Transparent="yes" />
+        <Control Id="ProgramLabel" Type="Text" X="20" Y="98" Width="380" Height="17" Text="程序位置：" Transparent="yes" />
         <Control Id="ProgramPath" Type="PathEdit" X="20" Y="118" Width="380" Height="20" Property="INSTALLFOLDER" />
-        <Control Id="DataLabel" Type="Text" X="20" Y="153" Width="380" Height="17" Text="数据存储位置（不存在时自动创建）：" />
+        <Control Id="DataLabel" Type="Text" X="20" Y="153" Width="380" Height="17" Text="数据位置：" Transparent="yes" />
         <Control Id="DataPath" Type="PathEdit" X="20" Y="173" Width="380" Height="20" Property="JZDATADIR" />
-        <Control Id="Hint" Type="Text" X="20" Y="203" Width="380" Height="45" Text="程序和数据请选择分开的文件夹，数据不能放在程序目录里面。缺少WebView2时，首次启动会打开微软安装窗口；此安装步骤不下载环境。" />
+        <Control Id="Hint" Type="Text" X="20" Y="203" Width="380" Height="45" Text="程序和数据分开保存，卸载保留数据。" Transparent="yes" />
         <Control Id="Install" Type="PushButton" X="245" Y="300" Width="75" Height="22" Default="yes" Text="安装">
           <Publish Event="SetTargetPath" Value="INSTALLFOLDER" Order="1" Condition="1" />
           <Publish Event="SetTargetPath" Value="JZDATADIR" Order="2" Condition="1" />
@@ -105,17 +105,17 @@
         </Control>
       </Dialog>
       <Dialog Id="InvalidStorageDlg" Width="380" Height="155" Title="请调整数据目录" NoMinimize="yes">
-        <Control Id="Message" Type="Text" X="20" Y="20" Width="340" Height="85" Text="数据目录不能与程序安装目录相同，也不能放在程序目录里面。请返回修改。&#13;&#10;&#13;&#10;例如：程序放在D:\Apps\JunZhenMatch，数据放在D:\JunZhenMatchData。" />
+        <Control Id="Message" Type="Text" X="20" Y="20" Width="340" Height="85" Text="数据目录不能与程序安装目录相同，也不能放在程序目录里面。请返回修改。&#13;&#10;&#13;&#10;例如：程序放在D:\Apps\JunZhenMatch，数据放在D:\JunZhenMatchData。" Transparent="yes" />
         <Control Id="Back" Type="PushButton" X="245" Y="118" Width="110" Height="22" Default="yes" Cancel="yes" Text="返回修改">
           <Publish Event="EndDialog" Value="Return" />
         </Control>
       </Dialog>
       <Dialog Id="MaintenanceDlg" Width="640" Height="342" Title="JunZhenMatch 维护" NoMinimize="yes">
-        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Title" Type="Text" X="20" Y="18" Width="280" Height="30" Text="{\TitleFont}修复或卸载" />
-        <Control Id="Version" Type="Text" X="310" Y="24" Width="90" Height="18" Text="v[ProductVersion]" />
-        <Control Id="Intro" Type="Text" X="20" Y="65" Width="380" Height="70" Text="修复前先用退出贴纸停止后台。修复会重新安装程序文件及快捷方式，保留教师库、存储位置和用户设置。找不到程序或文件损坏时，请选择修复安装。" />
-        <Control Id="Location" Type="Text" X="20" Y="145" Width="380" Height="55" Text="程序位置：[INSTALLFOLDER]" />
+        <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Title" Type="Text" X="20" Y="18" Width="280" Height="30" Text="{\TitleFont}修复或卸载" Transparent="yes" />
+        <Control Id="Version" Type="Text" X="310" Y="24" Width="90" Height="18" Text="v[ProductVersion]" Transparent="yes" />
+        <Control Id="Intro" Type="Text" X="20" Y="65" Width="380" Height="70" Text="当前版本已安装，可修复或卸载。&#10;操作前请先退出程序，数据与设置会保留。" Transparent="yes" />
+        <Control Id="Location" Type="Text" X="20" Y="145" Width="380" Height="55" Text="程序位置：[INSTALLFOLDER]" Transparent="yes" />
         <Control Id="Repair" Type="PushButton" X="85" Y="275" Width="105" Height="25" Default="yes" Text="修复安装">
           <Publish Event="AddLocal" Value="ALL" Order="1" Condition="!Complete&lt;&gt;3" />
           <Publish Event="ReinstallMode" Value="amus" Order="2" Condition="1" />
@@ -131,49 +131,67 @@
         </Control>
       </Dialog>
       <Dialog Id="ProgressDlg" Width="640" Height="342" Title="正在安装" Modeless="yes" NoMinimize="yes">
-        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="42" Width="380" Height="25" Text="正在安装 JunZhenMatch…" />
-        <Control Id="ActionText" Type="Text" X="20" Y="108" Width="380" Height="20" Text="正在准备安装…">
+        <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="42" Width="380" Height="25" Text="正在安装…" Transparent="yes" />
+        <Control Id="ActionText" Type="Text" X="20" Y="108" Width="380" Height="20" Text="正在准备安装…" Transparent="yes">
           <Subscribe Event="ActionText" Attribute="Text" />
         </Control>
-        <Control Id="ActionData" Type="Text" X="20" Y="132" Width="380" Height="30">
+        <Control Id="ActionData" Type="Text" X="20" Y="132" Width="380" Height="30" Transparent="yes">
           <Subscribe Event="ActionData" Attribute="Text" />
         </Control>
         <Control Id="Progress" Type="ProgressBar" X="20" Y="172" Width="380" Height="15" ProgressBlocks="yes">
           <Subscribe Event="SetProgress" Attribute="Progress" />
         </Control>
-        <Control Id="TimeHint" Type="Text" X="20" Y="205" Width="380" Height="55" Text="通常约10–30秒，较慢磁盘约1分钟。上方显示实际步骤和安装进度，初始化期间进度可能暂时停留。此步骤不下载组件；首次启动缺少WebView2时会显示微软下载窗口。" />
+        <Control Id="TimeHint" Type="Text" X="20" Y="205" Width="380" Height="55" Text="通常约10–30秒，请稍候。" Transparent="yes" />
       </Dialog>
       <Dialog Id="InstallerErrorDlg" Width="400" Height="175" Title="JunZhenMatch 安装错误" ErrorDialog="yes">
-        <Control Id="ErrorText" Type="Text" X="18" Y="18" Width="364" Height="105" NoPrefix="yes" Text="安装遇到错误。" />
-        <Control Id="O" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="确定"><Publish Event="EndDialog" Value="ErrorOk" /></Control>
-        <Control Id="C" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="取消"><Publish Event="EndDialog" Value="ErrorCancel" /></Control>
-        <Control Id="A" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="终止"><Publish Event="EndDialog" Value="ErrorAbort" /></Control>
-        <Control Id="R" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="重试"><Publish Event="EndDialog" Value="ErrorRetry" /></Control>
-        <Control Id="I" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="忽略"><Publish Event="EndDialog" Value="ErrorIgnore" /></Control>
-        <Control Id="Y" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="是"><Publish Event="EndDialog" Value="ErrorYes" /></Control>
-        <Control Id="N" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="否"><Publish Event="EndDialog" Value="ErrorNo" /></Control>
+        <Control Id="ErrorText" Type="Text" X="18" Y="18" Width="364" Height="105" NoPrefix="yes" Text="安装遇到错误。" Transparent="yes" />
+        <Control Id="O" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="确定">
+          <Publish Event="EndDialog" Value="ErrorOk" />
+        </Control>
+        <Control Id="C" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="取消">
+          <Publish Event="EndDialog" Value="ErrorCancel" />
+        </Control>
+        <Control Id="A" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="终止">
+          <Publish Event="EndDialog" Value="ErrorAbort" />
+        </Control>
+        <Control Id="R" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="重试">
+          <Publish Event="EndDialog" Value="ErrorRetry" />
+        </Control>
+        <Control Id="I" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="忽略">
+          <Publish Event="EndDialog" Value="ErrorIgnore" />
+        </Control>
+        <Control Id="Y" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="是">
+          <Publish Event="EndDialog" Value="ErrorYes" />
+        </Control>
+        <Control Id="N" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="否">
+          <Publish Event="EndDialog" Value="ErrorNo" />
+        </Control>
       </Dialog>
       <Dialog Id="ExitDialog" Width="640" Height="342" Title="操作完成" NoMinimize="yes">
-        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Message" Type="Text" X="20" Y="65" Width="380" Height="65" HideCondition="REMOVE~=&quot;ALL&quot;" Text="程序已安装或修复。可从桌面或开始菜单启动“䇹政导师匹配”。关闭窗口只关闭界面，彻底退出请使用右上角退出贴纸。" />
-        <Control Id="ProgramLocation" Type="Text" X="20" Y="145" Width="380" Height="65" HideCondition="REMOVE~=&quot;ALL&quot;" Text="程序文件：[INSTALLFOLDER]JunZhengMatch.exe" />
-        <Control Id="RemovedMessage" Type="Text" X="20" Y="75" Width="380" Height="100" Hidden="yes" ShowCondition="REMOVE~=&quot;ALL&quot;" Text="程序已卸载。教师库、备份、导出结果和用户设置已保留。" />
-        <Control Id="LogLocation" Type="Text" X="20" Y="215" Width="380" Height="18" Text="安装日志：[MsiLogFileLocation]" />
-        <Control Id="OpenFolder" Type="PushButton" X="20" Y="240" Width="120" Height="22" HideCondition="REMOVE~=&quot;ALL&quot;" Text="打开程序文件夹">
+        <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Message" Type="Text" X="20" Y="65" Width="380" Height="95" HideCondition="REMOVE~=&quot;ALL&quot;" Text="1. 双击桌面或开始菜单的快捷方式打开。&#10;&#10;2. 退出时，请点击程序右上角的退出图案。" Transparent="yes" />
+        <Control Id="ProgramLocation" Type="Text" X="20" Y="175" Width="380" Height="40" HideCondition="REMOVE~=&quot;ALL&quot;" Text="程序位置：[INSTALLFOLDER]" Transparent="yes" />
+        <Control Id="RemovedMessage" Type="Text" X="20" Y="75" Width="380" Height="100" Hidden="yes" ShowCondition="REMOVE~=&quot;ALL&quot;" Text="程序已卸载。教师库、备份、导出结果和用户设置已保留。" Transparent="yes" />
+        <Control Id="LogLocation" Type="Text" X="20" Y="215" Width="380" Height="18" Text="安装日志：[MsiLogFileLocation]" Hidden="yes" Transparent="yes" />
+        <Control Id="OpenFolder" Type="PushButton" X="155" Y="240" Width="120" Height="22" HideCondition="REMOVE~=&quot;ALL&quot;" Text="程序文件夹">
           <Publish Event="DoAction" Value="OpenProgramFolder" Condition="1" />
         </Control>
-        <Control Id="OpenLog" Type="PushButton" X="150" Y="240" Width="105" Height="22" Text="查看安装日志">
+        <Control Id="OpenLog" Type="PushButton" X="150" Y="240" Width="105" Height="22" Text="查看安装日志" Hidden="yes">
           <Publish Event="DoAction" Value="OpenInstallLog" Condition="MsiLogFileLocation" />
         </Control>
         <Control Id="Finish" Type="PushButton" X="325" Y="300" Width="75" Height="22" Default="yes" Cancel="yes" Text="完成">
           <Publish Event="EndDialog" Value="Return" />
         </Control>
+        <Control Id="Launch" Type="PushButton" X="20" Y="240" Width="120" Height="22" Text="立即打开" HideCondition="REMOVE~=&quot;ALL&quot;">
+          <Publish Event="DoAction" Value="LaunchInstalledApp" Order="1" Condition="1" />
+          <Publish Event="EndDialog" Value="Return" Order="2" Condition="1" />
+        </Control>
       </Dialog>
       <Dialog Id="FatalError" Width="640" Height="342" Title="安装失败" NoMinimize="yes">
-        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="65" Text="安装未完成。请查看安装日志，记录具体错误。本次操作没有成功完成。" />
-        <Control Id="LogLocation" Type="Text" X="20" Y="150" Width="380" Height="70" Text="安装日志：[MsiLogFileLocation]" />
+        <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="65" Text="安装未完成，请查看日志。" Transparent="yes" />
+        <Control Id="LogLocation" Type="Text" X="20" Y="150" Width="380" Height="70" Text="安装日志：[MsiLogFileLocation]" Transparent="yes" />
         <Control Id="OpenLog" Type="PushButton" X="20" Y="240" Width="120" Height="22" Text="查看安装日志">
           <Publish Event="DoAction" Value="OpenInstallLog" Condition="MsiLogFileLocation" />
         </Control>
@@ -182,20 +200,52 @@
         </Control>
       </Dialog>
       <Dialog Id="UserExit" Width="640" Height="342" Title="安装已取消" NoMinimize="yes">
-        <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="100" Text="安装已取消。" />
+        <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Message" Type="Text" X="20" Y="75" Width="380" Height="100" Text="安装已取消。" Transparent="yes" />
         <Control Id="Finish" Type="PushButton" X="325" Y="300" Width="75" Height="22" Default="yes" Cancel="yes" Text="关闭">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+      </Dialog>
+      <Dialog Id="UpgradeConfirmDlg" Width="640" Height="342" Title="发现已有版本" NoMinimize="yes">
+        <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Title" Type="Text" X="20" Y="24" Width="380" Height="30" Text="{\TitleFont}发现已有版本" Transparent="yes" />
+        <Control Id="Message" Type="Text" X="20" Y="90" Width="380" Height="90" Text="已安装 v[JZINSTALLEDVERSION]&#10;是否升级到 v[ProductVersion]？&#10;&#10;教师数据和设置会保留。" Transparent="yes" />
+        <Control Id="Accept" Type="PushButton" X="190" Y="285" Width="125" Height="24" Default="yes" Text="升级">
+          <Publish Event="EndDialog" Value="Return" Order="2" Condition="1" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="325" Y="285" Width="75" Height="24" Cancel="yes" Text="取消">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+      </Dialog>
+      <Dialog Id="NewerVersionDlg" Width="640" Height="342" Title="已安装较新版本" NoMinimize="yes">
+        <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
+        <Control Id="Title" Type="Text" X="20" Y="24" Width="380" Height="30" Text="{\TitleFont}已安装较新版本" Transparent="yes" />
+        <Control Id="Message" Type="Text" X="20" Y="90" Width="380" Height="90" Text="已安装 v[JZINSTALLEDVERSION]，高于本安装包 v[ProductVersion]。&#10;&#10;可进入已安装版本的维护页面修复或卸载。" Transparent="yes" />
+        <Control Id="Accept" Type="PushButton" X="190" Y="285" Width="125" Height="24" Default="yes" Text="修复或卸载">
+          <Publish Event="DoAction" Value="OpenExistingMaintenance" Order="1" Condition="1" />
+          <Publish Event="EndDialog" Value="Exit" Order="2" Condition="1" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="325" Y="285" Width="75" Height="24" Cancel="yes" Text="取消">
           <Publish Event="EndDialog" Value="Exit" />
         </Control>
       </Dialog>
     </UI>
     <InstallUISequence>
-      <Show Dialog="StorageSetupDlg" After="CostFinalize" Condition="NOT Installed" />
+      <Show Dialog="StorageSetupDlg" After="UpgradeConfirmDlg" Condition="NOT Installed" />
       <Show Dialog="MaintenanceDlg" After="StorageSetupDlg" Condition="Installed AND NOT REMOVE" />
-      <Show Dialog="ProgressDlg" Before="ExecuteAction" />
+      <Show Dialog="ProgressDlg" Before="StartInstallActivity" />
       <Show Dialog="ExitDialog" OnExit="success" />
       <Show Dialog="FatalError" OnExit="error" />
       <Show Dialog="UserExit" OnExit="cancel" />
+      <Custom Action="DetectRelatedVersion" After="FindRelatedProducts" />
+      <Show Dialog="NewerVersionDlg" Before="LaunchConditions" Condition="WIX_DOWNGRADE_DETECTED" />
+      <Show Dialog="UpgradeConfirmDlg" After="CostFinalize" Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
+      <Custom Action="StartInstallActivity" Before="ExecuteAction" />
     </InstallUISequence>
+    <Binary Id="InstallerUiHelper" SourceFile="$(var.UiHelperPath)" />
+    <CustomAction Id="StartInstallActivity" BinaryRef="InstallerUiHelper" DllEntry="StartActivity" Return="ignore" />
+    <CustomAction Id="DetectRelatedVersion" BinaryRef="InstallerUiHelper" DllEntry="DetectRelatedVersion" Return="check" />
+    <CustomAction Id="OpenExistingMaintenance" BinaryRef="InstallerUiHelper" DllEntry="OpenExistingMaintenance" Return="check" />
+    <CustomAction Id="LaunchInstalledApp" FileRef="MainExe" ExeCommand="--desktop" Return="asyncNoWait" />
   </Package>
 </Wix>

@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Msi,[string]$PreviousMsi,[string]$Report='installer-test.json')
+param([Parameter(Mandatory=$true)][string]$Msi,[string]$PreviousMsi,[string]$FutureMsi,[string]$Report='installer-test.json')
 $ErrorActionPreference='Stop'
 $msiPath=(Resolve-Path $Msi).Path
 $root=Join-Path $env:RUNNER_TEMP ('jz-install-'+[guid]::NewGuid().ToString('N'))
@@ -26,13 +26,15 @@ function Invoke-Quiet($package,$operation,$name,$extra=@()) {
     throw "MSI $name failed: $($process.ExitCode)"
   }
 }
-function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog,[switch]$RejectPaths) {
+function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog,[switch]$RejectPaths,[switch]$CancelUpgrade,[switch]$ExpectNewer) {
   $arguments=@('tools/verify_installer_ui.py','--msi',$package,'--app',$app,'--data',$data,'--log',(Join-Path $root ($name+'.log')),'--no-properties')
   if ($Maintenance) {$arguments+='--maintenance'}
   if ($EditPaths) {$arguments+='--edit-paths'}
   if ($Remove) {$arguments+='--remove'}
   if ($AutomaticLog) {$arguments+='--automatic-log'}
   if ($RejectPaths) {$arguments+='--reject-paths'}
+  if ($CancelUpgrade) {$arguments+='--cancel-upgrade'}
+  if ($ExpectNewer) {$arguments+='--expect-newer'}
   & python @arguments
   if ($LASTEXITCODE -ne 0) { throw "Visible MSI $name failed" }
 }
@@ -47,6 +49,7 @@ function Assert-RejectedQuiet($package,$app,$data,$name) {
 function Assert-Program($app) {
   $exe=Join-Path $app 'JunZhengMatch.exe'
   if (!(Test-Path -LiteralPath $exe)) { throw "Installer reported success without an EXE: $exe" }
+  if (!(Test-Path -LiteralPath (Join-Path $app 'desktop-mode'))) { throw 'MSI desktop launch marker is missing' }
   if ((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion -ne $expectedVersion) { throw 'Installed program version mismatch' }
   return $exe
 }
@@ -92,10 +95,12 @@ try {
   Assert-DataPath $defaultData
   $progress=Get-Content (Join-Path $root 'fresh-default.progress.json') -Raw | ConvertFrom-Json
   if ($progress.stages.Count -lt 1 -or @($progress.positions | Where-Object {$_ -gt 0}).Count -lt 1) { throw 'MSI did not display actual stage/progress updates' }
+  if ($progress.activity_frames.Count -lt 2) { throw 'Installer particle animation did not advance' }
   Copy-Item (Join-Path $root 'fresh-default.progress.json') "$pwd/installer-progress-test.json"
   Test-Program $exe "$pwd/fresh-install-test.json"
   $chosen=Get-DataPath;$hash=Mark-Data $chosen;$settings=Get-Content $configPath -Raw
   $cases+='fresh_default_exe_runs';$cases+='automatic_install_log'
+  $cases+='independent_particle_animation_updates'
 
   # Reproduce the user's visible state: registered as installed, EXE gone.
   Remove-Item -LiteralPath $exe -Force
@@ -179,6 +184,10 @@ try {
     $cases+='invalid_upgrade_preserves_existing_registration'
     $app=Join-Path $root 'Recovered program'
     $data=$previousData
+    Invoke-Wizard $msiPath $app $data 'cancel-upgrade' -CancelUpgrade
+    $null=$installer.ProductInfo($legacyCode,'VersionString')
+    Assert-Data $previousData $legacyHash
+    $cases+='upgrade_confirmation_cancel_preserves_old_version'
     Invoke-Wizard $msiPath $app $data 'recover-empty-upgrade' -EditPaths
     $installed=$true;$previousInstalled=$false;$exe=Assert-Program $app
     $legacyRegistered=$false
@@ -209,6 +218,20 @@ try {
   $installed=$false
   if (Test-Path $exe) { throw 'Final uninstall did not remove program files' }
   Assert-Data $data $legacyHash
+  if ($FutureMsi) {
+    $futurePath=(Resolve-Path $FutureMsi).Path
+    $futureApp=Join-Path $root 'Newer version program';$futureData=Join-Path $root 'Newer version data'
+    Invoke-Wizard $futurePath $futureApp $futureData 'future-install' -EditPaths
+    $installed=$true
+    $futureExe=Assert-Program $futureApp;$futureHash=Mark-Data $futureData
+    Invoke-Wizard $msiPath $futureApp $futureData 'newer-version-cancel' -ExpectNewer
+    if (!(Test-Path $futureExe)) { throw 'Older package removed the installed newer version' }
+    Assert-Data $futureData $futureHash
+    $cases+='newer_installed_version_offers_maintenance_without_downgrade'
+    Invoke-Wizard $futurePath $futureApp $futureData 'future-uninstall' -Maintenance -Remove
+    $installed=$false
+    Assert-Data $futureData $futureHash
+  }
   @{status='ok';publisher='xiaoyuyuan2006dx';version=$expectedVersion;no_cli_install_overrides=$true;legacy_empty_registration=$legacyEmpty;advertised_state_fixture='Feature.Attributes=0; production repair events and sequences unchanged';cases=$cases;uninstall_preserves_database=$true} | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $Report
 }
 finally {

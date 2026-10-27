@@ -56,6 +56,8 @@ def main():
     parser.add_argument('--data-dir');parser.add_argument('--configure-data');parser.add_argument('--ensure-webview2',action='store_true');parser.add_argument('--pick-directory',action='store_true')
     parser.add_argument('--keep-existing-settings',action='store_true')
     args=parser.parse_args()
+    # MSI owns this marker; portable builds keep their browser-first behavior.
+    if getattr(sys,'frozen',False) and (Path(sys.executable).parent/'desktop-mode').is_file():args.desktop=True
     if args.data_dir:os.environ['JZ_DATA_DIR']=str(Path(args.data_dir).expanduser().resolve())
     if args.self_test:return self_test(args.report)
     if args.pick_directory:

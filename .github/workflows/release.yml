@@ -112,8 +112,17 @@ jobs:
       - name: Build per-user MSI
         shell: pwsh
         run: |
+          python tools/render_installer_background.py
+          if ($LASTEXITCODE -ne 0) { throw 'Installer background render failed' }
+          $vswhere="${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs=& $vswhere -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $vcvars=Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
+          cmd /c "`"$vcvars`" >nul && cl /nologo /LD /MT /O2 /utf-8 /std:c17 /D_WIN32_WINNT=0x0601 packaging\windows\installer_activity.c /Fo:build\InstallerUi.obj /link /OUT:build\InstallerUi.dll /IMPLIB:build\InstallerUi.lib msi.lib user32.lib gdi32.lib shell32.lib"
+          if ($LASTEXITCODE -ne 0) { throw 'Installer UI helper build failed' }
           dotnet tool install --global wix --version 5.0.2
-          wix build packaging/windows/installer.wxs -arch x64 -d "Version=$env:APP_VERSION" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "BootstrapperPath=$((Resolve-Path dist/MicrosoftEdgeWebview2Setup.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -o "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi"
+          wix build packaging/windows/installer.wxs -arch x64 -d "Version=$env:APP_VERSION" -d "UiHelperPath=$((Resolve-Path build/InstallerUi.dll).Path)" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "BootstrapperPath=$((Resolve-Path dist/MicrosoftEdgeWebview2Setup.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -o "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi"
+          if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' }
+          wix build packaging/windows/installer.wxs -arch x64 -d "Version=99.0.0" -d "UiHelperPath=$((Resolve-Path build/InstallerUi.dll).Path)" -d "AppPath=$((Resolve-Path dist/JunZhengMatch.exe).Path)" -d "BootstrapperPath=$((Resolve-Path dist/MicrosoftEdgeWebview2Setup.exe).Path)" -d "IconPath=$((Resolve-Path assets/app.ico).Path)" -o "build/newer-version-fixture.msi"
           if ($LASTEXITCODE -ne 0) { throw 'MSI build failed' }
           wix msi validate "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -sice ICE20
       - name: Install, verify and uninstall MSI
@@ -124,7 +133,7 @@ jobs:
           gh release download v1.1.1 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir previous
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download upgrade baseline' }
           $previous=(Get-ChildItem previous/*.msi | Select-Object -First 1).FullName
-          ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -PreviousMsi $previous -Report installer-test.json
+          ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -PreviousMsi $previous -FutureMsi build/newer-version-fixture.msi -Report installer-test.json
       - run: python tools/verify_runtime.py --exe dist/JunZhengMatch.exe --desktop --report exe-runtime-test.json
       - uses: actions/download-artifact@v4
         with:
@@ -143,6 +152,11 @@ jobs:
         with:
           name: windows
           path: release/*
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installer-preview
+          path: installer-ui-preview/*.png
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
