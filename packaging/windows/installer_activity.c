@@ -9,6 +9,7 @@
 #include <wchar.h>
 
 static HINSTANCE module;
+static DWORD ui_pid;
 static const wchar_t *activity_class=L"JZInstallerActivity";
 typedef struct { ULONGLONG started; unsigned frames; HFONT font; HWND parent; } Activity;
 
@@ -16,7 +17,7 @@ static BOOL CALLBACK find_progress(HWND window,LPARAM output) {
     DWORD pid=0; wchar_t title[128];
     GetWindowThreadProcessId(window,&pid);
     GetWindowTextW(window,title,128);
-    if(pid==GetCurrentProcessId() && IsWindowVisible(window) && !wcscmp(title,L"正在安装")) {
+    if(pid==ui_pid && IsWindowVisible(window) && !wcscmp(title,L"正在安装")) {
         *(HWND*)output=window; return FALSE;
     }
     return TRUE;
@@ -24,7 +25,7 @@ static BOOL CALLBACK find_progress(HWND window,LPARAM output) {
 static BOOL CALLBACK find_finished(HWND window,LPARAM output) {
     DWORD pid=0; wchar_t title[128];
     GetWindowThreadProcessId(window,&pid); GetWindowTextW(window,title,128);
-    if(pid==GetCurrentProcessId() && IsWindowVisible(window) &&
+    if(pid==ui_pid && IsWindowVisible(window) &&
        (!wcscmp(title,L"操作完成") || !wcscmp(title,L"安装失败") || !wcscmp(title,L"安装已取消"))) {
         *(BOOL*)output=TRUE; return FALSE;
     }
@@ -92,7 +93,13 @@ static DWORD WINAPI activity_thread(void *unused) {
     DeleteObject(state.font);return 0;
 }
 __declspec(dllexport) UINT __stdcall StartActivity(MSIHANDLE install) {
-    HMODULE pinned=NULL;(void)install;
+    HMODULE pinned=NULL;wchar_t client[40]={0};DWORD length=39;
+    MsiGetPropertyW(install,L"CLIENTPROCESSID",client,&length);
+    ui_pid=client[0]?wcstoul(client,NULL,10):GetCurrentProcessId();
+    MSIHANDLE record=MsiCreateRecord(2);
+    MsiRecordSetStringW(record,0,L"JZ animation: helper PID [1], UI PID [2]");
+    MsiRecordSetInteger(record,1,(int)GetCurrentProcessId());MsiRecordSetInteger(record,2,(int)ui_pid);
+    MsiProcessMessage(install,INSTALLMESSAGE_INFO,record);MsiCloseHandle(record);
     /* MSI may unload an immediate-action DLL. Pin this UI-only helper until
        its client process exits so the animation thread never executes freed code. */
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,(LPCWSTR)&StartActivity,&pinned);

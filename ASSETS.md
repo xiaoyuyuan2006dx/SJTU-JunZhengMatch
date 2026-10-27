@@ -16,4 +16,4 @@
 
 ## 安装引导插图
 
-用户提供的樱花琴音图片原件保存在 `assets/installer-art.png`，安装程序使用保持原比例的RGB位图 `assets/installer-art.bmp`。右侧插图与左侧路径、进度和完成按钮分开布局，嵌入MSI，无需联网加载。
+用户提供的樱花琴音图片原件保存在 `assets/installer-art.png`，安装背景由 `packaging/windows/installer-background.html` 组合原图、薄荷绿／樱粉渐变及奶油色面板。构建时渲染为 `build/installer-background.bmp` 嵌入MSI，右侧立绘渐隐融入背景，不联网加载。原图不改动。

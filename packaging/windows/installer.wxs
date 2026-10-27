@@ -32,7 +32,7 @@
             <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
             <RemoveFolder Id="RemoveAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
             <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsFolder" On="uninstall" />
-            <File Id="DesktopMode" SourceFile="packaging/windows/desktop-mode" />
+            <File Id="DesktopMode" Source="packaging/windows/desktop-mode" />
           </Component>
         </Directory>
       </Directory>

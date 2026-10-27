@@ -11,13 +11,11 @@
 在 [Releases](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases/latest) 选择：
 
 - **portable.zip**：解压后双击 `JunZhengMatch.exe`，在浏览器操作，无需安装 Python。
-- **setup.msi**：安装时选择程序和数据位置，使用桌面或开始菜单快捷方式打开独立窗口。MSI 不联网下载组件；缺少 WebView2 时，首次启动显示下载与安装窗口。
+- **setup.msi**：安装后从桌面、开始菜单或安装目录的 EXE 打开独立窗口，默认最大化。
 
-安装完成页会显示 EXE 的完整位置，可点击“打开程序文件夹”。再次运行同一 MSI 会进入维护页，选择“修复安装”可恢复缺失的 EXE 和快捷方式，保留教师库及设置；也可选择卸载。安装失败时可直接点击“查看安装日志”。
+发现旧版本时会询问是否升级；相同版本可修复或卸载。安装包比已装版本旧时，可进入已装版本的维护页面。操作前先点击程序右上角的退出图案停止后台。
 
-程序和数据须放在分开的文件夹，数据目录不能与程序目录相同或位于其内部。安装器会在开始前检查，冲突时可返回修改。直接双击 EXE 打开浏览器；安装后的桌面／开始菜单快捷方式打开独立窗口。
-
-MSI 显示实际安装进度和当前步骤，通常约10–30秒，较慢磁盘约1分钟。首次启动若需下载 WebView2，会显示已等待时间、活动进度条及微软下载窗口，通常约1–3分钟，最多等待5分钟后报错；耗时取决于网络，不显示虚假的精确百分比。失败后可检查网络，再运行安装目录中的 `MicrosoftEdgeWebview2Setup.exe`，或直接双击 `JunZhengMatch.exe` 使用浏览器版。发布者信息为 `xiaoyuyuan2006dx`。
+程序和数据请选择分开的文件夹。安装通常约10–30秒，界面显示实际步骤、进度条及独立跳动的粒子；粒子是等待反馈，不代表安装百分比。首次启动仅在缺少组件时准备运行环境，通常约1–3分钟；已有环境不会显示额外安装窗口。安装失败可查看日志。
 
 默认数据位于 `%USERPROFILE%\JunZhenMatch`（C盘用户目录下），不存在时自动创建。浏览器版首次启动会提示位置，两版均可在“偏好设置”中修改存储位置及导入导出数据。教师库、导出、日志保存在此处；不保留上传原表。升级或卸载保留数据。
 
@@ -34,7 +32,7 @@ Windows 独立窗口另安装 `packaging/requirements-desktop.txt`，运行 `pyt
 
 ```bash
 python -m pip install -r packaging/requirements-dev.txt
-python tools/build_version.py --version v1.1.4
+python tools/build_version.py --version v1.2.0
 pyinstaller --clean --noconfirm packaging/JunZhengMatch.spec
 ```
 
@@ -91,7 +89,7 @@ JZ_PASSWORD='替换为至少12字符的密码' docker compose up -d --build
 
 同一学生不重复，回避指导老师和明确正高记录。两种模式均遵守教师使用上限；若可用教师不足，会留空并提示原因，不会超额补齐。上限1适合完全不复用；提高上限可缓解候选不足，但不保证相关性。
 
-页面支持全部学生、序号范围、单个序号和姓名筛选。启动支持 `--port 8080`、`--data-dir 路径`、`--no-open`（前台服务）；`JZ_DATA_DIR` 可指定数据目录。脚本接口：`PYTHONPATH=src python -m junzheng_match.sjtu_match_reviewers --help`。
+匹配结果右上角的箭头可收起或展开预览，收起后仍可导出，结果不会丢失。页面支持全部学生、序号范围、单个序号和姓名筛选。启动支持 `--port 8080`、`--data-dir 路径`、`--no-open`（前台服务）；`JZ_DATA_DIR` 可指定数据目录。脚本接口：`PYTHONPATH=src python -m junzheng_match.sjtu_match_reviewers --help`。
 
 # 数据库
 
