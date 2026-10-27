@@ -67,8 +67,10 @@ try {
   # Fresh default installation, exactly like double-clicking. No INSTALLFOLDER,
   # JZDATADIR, ADDLOCAL or REINSTALL properties are injected into the MSI.
   if (Test-Path (Join-Path $defaultApp 'JunZhengMatch.exe')) { throw 'Windows test machine is not clean' }
+  if (Test-Path $configPath) { throw 'Default user preferences are not clean before first install' }
   Invoke-Wizard $msiPath $defaultApp $defaultData 'fresh-default' -AutomaticLog
   $installed=$true;$exe=Assert-Program $defaultApp
+  Assert-DataPath $defaultData
   Test-Program $exe "$pwd/fresh-install-test.json"
   $chosen=Get-DataPath;$hash=Mark-Data $chosen;$settings=Get-Content $configPath -Raw
   $cases+='fresh_default_exe_runs';$cases+='automatic_install_log'

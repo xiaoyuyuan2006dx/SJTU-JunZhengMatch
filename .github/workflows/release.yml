@@ -106,6 +106,7 @@ jobs:
           Invoke-WebRequest 'https://go.microsoft.com/fwlink/p/?LinkId=2124703' -OutFile dist/MicrosoftEdgeWebview2Setup.exe
           $signature=Get-AuthenticodeSignature dist/MicrosoftEdgeWebview2Setup.exe
           if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Microsoft') { throw 'WebView2 signature validation failed' }
+          $env:JZ_CONFIG_DIR=Join-Path $env:RUNNER_TEMP 'jz-desktop-prereq-config'
           $process=Start-Process dist/JunZhengMatch.exe -ArgumentList '--configure-data',"$env:RUNNER_TEMP\jz-desktop-prereq",'--ensure-webview2','--no-open' -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw 'WebView2 setup failed' }
       - name: Build per-user MSI
