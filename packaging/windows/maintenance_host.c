@@ -28,7 +28,18 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
         LocalFree(args);return ERROR_ACCESS_DENIED;
     }
     if(check) {LocalFree(args);return ERROR_SUCCESS;}
-    if(count!=3 || MsiVerifyPackageW(args[2])!=ERROR_SUCCESS) {LocalFree(args);return ERROR_INSTALL_PACKAGE_INVALID;}
+    if(count!=3 && count!=4) {LocalFree(args);return ERROR_INVALID_PARAMETER;}
+    if(count==4) {
+        HANDLE previous_client=OpenProcess(SYNCHRONIZE,FALSE,wcstoul(args[3],NULL,10));
+        if(previous_client) {
+            DWORD waited=WaitForSingleObject(previous_client,30000);CloseHandle(previous_client);
+            if(waited!=WAIT_OBJECT_0) {
+                MessageBoxW(NULL,L"原安装窗口尚未关闭。请关闭后重新打开安装包。",L"管理员维护",MB_OK|MB_ICONINFORMATION);
+                LocalFree(args);return ERROR_BUSY;
+            }
+        }
+    }
+    if(MsiVerifyPackageW(args[2])!=ERROR_SUCCESS) {LocalFree(args);return ERROR_INSTALL_PACKAGE_INVALID;}
     wchar_t program[MAX_PATH],parameters[33000];
     GetSystemDirectoryW(program,MAX_PATH);wcscat_s(program,MAX_PATH,L"\\msiexec.exe");
     swprintf_s(parameters,33000,L"\"%ls\" /i \"%ls\"",program,args[2]);

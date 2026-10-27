@@ -274,7 +274,7 @@ __declspec(dllexport) UINT __stdcall RestartElevated(MSIHANDLE install) {
     if(output!=INVALID_HANDLE_VALUE)CloseHandle(output);
     if(record)MsiCloseHandle(record);if(view)MsiCloseHandle(view);if(database)MsiCloseHandle(database);
     if(ok) {
-        swprintf_s(parameters,33000,L"%ls \"%ls\"",sid,package);
+        swprintf_s(parameters,33000,L"%ls \"%ls\" %ls",sid,package,client);
         SHELLEXECUTEINFOW request={sizeof(request)};request.lpVerb=L"runas";request.lpFile=host;request.lpParameters=parameters;request.nShow=SW_SHOWNORMAL;
         if(ShellExecuteExW(&request))MsiSetPropertyW(install,L"JZELEVATIONHANDOFF",L"1");
         else {
