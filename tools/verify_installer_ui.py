@@ -23,6 +23,41 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     user.SendMessageW.argtypes=[w.HWND,w.UINT,w.WPARAM,w.LPARAM]
     user.GetClassNameW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
     user.GetWindowRect.argtypes=[w.HWND,ctypes.POINTER(w.RECT)]
+    class MouseInput(ctypes.Structure):
+        _fields_=[('dx',w.LONG),('dy',w.LONG),('mouseData',w.DWORD),('dwFlags',w.DWORD),('time',w.DWORD),('dwExtraInfo',ctypes.c_size_t)]
+    class KeyInput(ctypes.Structure):
+        _fields_=[('wVk',w.WORD),('wScan',w.WORD),('dwFlags',w.DWORD),('time',w.DWORD),('dwExtraInfo',ctypes.c_size_t)]
+    class InputUnion(ctypes.Union):
+        _fields_=[('mi',MouseInput),('ki',KeyInput)]
+    class Input(ctypes.Structure):
+        _anonymous_=('data',)
+        _fields_=[('type',w.DWORD),('data',InputUnion)]
+    user.SendInput.argtypes=[w.UINT,ctypes.POINTER(Input),ctypes.c_int]
+    user.SetForegroundWindow.argtypes=[w.HWND]
+    def type_path(dialog,control,value):
+        # Use real mouse/keyboard input: MSI's bound Edit properties are updated
+        # by the normal control event loop, not arbitrary remote text messages.
+        rect=w.RECT();user.GetWindowRect(control,ctypes.byref(rect))
+        user.SetForegroundWindow(dialog)
+        user.SetCursorPos((rect.left+rect.right)//2,(rect.top+rect.bottom)//2)
+        user.mouse_event(0x0002,0,0,0,0);user.mouse_event(0x0004,0,0,0,0)
+        time.sleep(.15)
+        keys=[]
+        def key(vk=0,scan=0,flags=0):
+            item=Input();item.type=1;item.ki=KeyInput(vk,scan,flags,0,0);keys.append(item)
+        key(0x11);key(0x41);key(0x41,flags=2);key(0x11,flags=2)
+        encoded=value.encode('utf-16-le')
+        for offset in range(0,len(encoded),2):
+            scan=int.from_bytes(encoded[offset:offset+2],'little')
+            key(scan=scan,flags=4);key(scan=scan,flags=6)
+        inputs=(Input*len(keys))(*keys)
+        if user.SendInput(len(inputs),inputs,ctypes.sizeof(Input))!=len(inputs):raise RuntimeError('Windows rejected installer keyboard input')
+        time.sleep(.2)
+        if edit_text(control).rstrip('\\/').casefold()!=value.rstrip('\\/').casefold():raise RuntimeError('Path edit did not accept keyboard input: '+edit_text(control))
+        keys.clear();key(0x09);key(0x09,flags=2)
+        inputs=(Input*len(keys))(*keys)
+        if user.SendInput(len(inputs),inputs,ctypes.sizeof(Input))!=len(inputs):raise RuntimeError('Windows rejected installer Tab input')
+        time.sleep(.2)
     def caption(hwnd):
         buffer=ctypes.create_unicode_buffer(4096);user.GetWindowTextW(hwnd,buffer,4096);return buffer.value
     def edit_text(hwnd):
@@ -71,19 +106,8 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                             if edit_wait_started is None:edit_wait_started=time.monotonic()
                             if time.monotonic()-edit_wait_started>10:raise RuntimeError('Path fields did not become ready: '+repr(controls))
                             continue
-                        # A Rich Edit WM_SETTEXT can suppress EN_CHANGE. Replace
-                        # the selected text like a user paste so MSI updates its
-                        # bound properties, not just the visible control text.
                         for (_,child),value in zip(sorted(edits),[str(app),str(data)]):
-                            # MSI Edit properties are committed when the focused
-                            # field loses focus. Give each remote control focus
-                            # through its own dialog thread before editing it.
-                            user.SendMessageW(hwnd,0x0028,child,1)
-                            text_buffer=ctypes.create_unicode_buffer(value)
-                            user.SendMessageW(child,0x00B1,0,-1)
-                            user.SendMessageW(child,0x00C2,1,ctypes.cast(text_buffer,ctypes.c_void_p).value)
-                            if edit_text(child).rstrip('\\/').casefold()!=value.rstrip('\\/').casefold():raise RuntimeError('Path edit did not accept user input: '+edit_text(child))
-                        user.SendMessageW(hwnd,0x0028,0,0)
+                            type_path(hwnd,child,value)
                         paths_edited=True
                         time.sleep(.3)
                 elif title=='JunZhenMatch 维护':button='卸载程序' if remove else '修复安装';seen.add('maintenance')
