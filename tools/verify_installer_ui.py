@@ -4,7 +4,11 @@ import ctypes
 from ctypes import wintypes as w
 from pathlib import Path
 import subprocess
+import sys
 import time
+
+sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
+sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
 def install(msi,app,data,log,maintenance=False):
