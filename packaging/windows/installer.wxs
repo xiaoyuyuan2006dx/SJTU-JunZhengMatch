@@ -10,6 +10,10 @@
     <Property Id="INSTALLFOLDER" Secure="yes" />
     <Property Id="MsiLogging" Value="voicewarmupx" />
     <StandardDirectory Id="WindowsFolder" />
+    <!-- A logical path for validation, not an MSI-owned data component. -->
+    <StandardDirectory Id="TARGETDIR">
+      <Directory Id="JZDATADIR" Name="JunZhenMatchData" />
+    </StandardDirectory>
     <Property Id="PREVIOUSINSTALLFOLDER">
       <RegistrySearch Id="ExistingInstallDir" Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstallDir" Type="raw" />
     </Property>
@@ -20,7 +24,6 @@
     <SetProperty Id="JZDATADIR" Action="UsePreviousDataDir" Value="[PREVIOUSJZDATADIR]" Before="UseDefaultDataDir" Sequence="both" Condition="NOT JZDATADIR AND PREVIOUSJZDATADIR" />
     <SetProperty Id="JZDATADIR" Action="UseDefaultDataDir" Value="[%USERPROFILE]\JunZhenMatch" Before="CostInitialize" Sequence="both" Condition="NOT JZDATADIR" />
     <StandardDirectory Id="LocalAppDataFolder">
-      <Directory Id="JZDATADIR" Name="JunZhenMatchData" />
       <Directory Id="ProgramsFolder" Name="Programs">
         <Directory Id="INSTALLFOLDER" Name="JunZhenMatch">
           <Component Id="AppFiles" Guid="F833CD4F-49D1-4216-B2F3-3222CF2A21E7">
