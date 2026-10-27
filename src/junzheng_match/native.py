@@ -48,10 +48,12 @@ def ensure_webview2():
 
 
 class DesktopBridge:
-    def __init__(self):self.window=None
+    # pywebview recursively exposes public attributes to JavaScript. Keep the
+    # native window private to prevent traversing its cyclic WinForms objects.
+    def __init__(self):self._window=None
     def choose_data_dir(self):
         import webview
-        selected=self.window.create_file_dialog(webview.FileDialog.FOLDER)
+        selected=self._window.create_file_dialog(webview.FileDialog.FOLDER)
         return selected[0] if selected else ''
     def save_export(self,filename,encoded):
         import webview
@@ -59,11 +61,11 @@ class DesktopBridge:
         if suffix not in ('.csv','.xlsx','.db'):raise ValueError('不支持的导出类型。')
         content=base64.b64decode(encoded,validate=True)
         if len(content)>25*1024*1024:raise ValueError('导出文件过大。')
-        chosen=self.window.create_file_dialog(webview.FileDialog.SAVE,save_filename=Path(filename).name,file_types=('导出文件 (*'+suffix+')',))
+        chosen=self._window.create_file_dialog(webview.FileDialog.SAVE,save_filename=Path(filename).name,file_types=('导出文件 (*'+suffix+')',))
         if not chosen:return dict(saved=False)
         target=Path(chosen[0]);target.write_bytes(content)
         return dict(saved=True,path=str(target))
-    def close_window(self):self.window.destroy()
+    def close_window(self):self._window.destroy()
 
 
 def open_desktop(instance,profile,smoke_report=None):
@@ -83,7 +85,7 @@ def open_desktop(instance,profile,smoke_report=None):
     bridge=DesktopBridge()
     if diagnostic:diagnostic.write('Creating window\n')
     window=webview.create_window('䇹政导师匹配',instance['url']+'/?interface=desktop',js_api=bridge,width=1320,height=900,min_size=(850,600),background_color='#fffdf9')
-    bridge.window=window
+    bridge._window=window
     result={}
     if smoke_report:
         def exercise():
@@ -105,6 +107,7 @@ def open_desktop(instance,profile,smoke_report=None):
     webview.start(gui=gui,storage_path=str(Path(profile)/'webview'),private_mode=False,icon=str(paths.RESOURCE_ROOT/'assets/app.ico'))
     if smoke_report:
         faulthandler.cancel_dump_traceback_later()
+        logging.getLogger('pywebview').removeHandler(handler)
         diagnostic.write('Native event loop ended\n');diagnostic.close()
         Path(smoke_report).write_text(json.dumps(result),encoding='utf-8')
         if result.get('status')!='ok':raise RuntimeError(result.get('error','独立窗口验证失败'))
