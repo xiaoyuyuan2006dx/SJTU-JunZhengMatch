@@ -134,7 +134,7 @@ try {
   # Reproduce a registered-but-advertised state for this same product/version.
   # A repair must install absent components, not request Reinstall of them.
   $emptyApp=$defaultApp
-  $emptyData=$defaultData
+  $emptyData=$chosen
   # The shipping package disallows advertising during normal installation.
   # A CI-only fixture relaxes that UI attribute to reproduce the abnormal
   # feature state in the user's log. All repair events/sequences stay intact.
