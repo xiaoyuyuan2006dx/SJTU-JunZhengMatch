@@ -60,8 +60,10 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
             key(scan=scan,flags=4);key(scan=scan,flags=6)
         inputs=(Input*len(keys))(*keys)
         if user.SendInput(len(inputs),inputs,ctypes.sizeof(Input))!=len(inputs):raise RuntimeError('Windows rejected installer keyboard input')
-        time.sleep(.2)
-        if edit_text(control).rstrip('\\/').casefold()!=value.rstrip('\\/').casefold():raise RuntimeError('Path edit did not accept keyboard input: '+edit_text(control))
+        input_deadline=time.monotonic()+10
+        while edit_text(control).rstrip('\\/').casefold()!=value.rstrip('\\/').casefold():
+            if time.monotonic()>=input_deadline:raise RuntimeError('Path edit did not accept keyboard input: '+edit_text(control))
+            time.sleep(.1)
         keys.clear();key(0x09);key(0x09,flags=2)
         inputs=(Input*len(keys))(*keys)
         if user.SendInput(len(inputs),inputs,ctypes.sizeof(Input))!=len(inputs):raise RuntimeError('Windows rejected installer Tab input')
