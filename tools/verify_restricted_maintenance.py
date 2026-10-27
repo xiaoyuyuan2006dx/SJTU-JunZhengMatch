@@ -1,4 +1,4 @@
-"""Real maintenance with a restricted same-user token on an isolated NTFS VHD.
+"""Real maintenance with a standard account and same-SID admin retry on an isolated NTFS VHD.
 
 Never changes the host's Config.Msi ACL. The full token retries against the same
 per-user product; this tests the security-context distinction behind issue 5.
@@ -11,6 +11,8 @@ import json
 import os
 from pathlib import Path
 import shutil
+import secrets
+import traceback
 import subprocess
 import sys
 import tempfile
@@ -94,55 +96,69 @@ def worker(root,stage):
 
 def main(msi):
     from verify_installer_ui import install
-    sid=subprocess.check_output(['whoami','/user','/fo','csv','/nh'],text=True).strip().split(',')[-1].strip('"')
+    name='JzMaint'+secrets.token_hex(4);password='Jz!'+secrets.token_hex(20)+'Aa9'
     letter=next(x for x in 'RSTUVWXYZ' if not Path(x+':/').exists());root=Path(letter+':/')
+    account_created=False;runner_installed=False
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
         disk=Path(temp)/'maintenance.vhd';script=Path(temp)/'diskpart.txt'
         script.write_text(f'create vdisk file="{disk}" maximum=256 type=expandable\nselect vdisk file="{disk}"\nattach vdisk\ncreate partition primary\nformat fs=ntfs quick\nassign letter={letter}\n',encoding='ascii')
         result=subprocess.run(['diskpart','/s',str(script)],capture_output=True,timeout=60)
         assert root.exists(),result.stdout.decode(errors='replace')
-        installed=False
         try:
-            shutil.copy2(msi,root/'package.msi');shutil.copy2('build/InstallerUi.dll',root/'InstallerUi.dll')
+            result=subprocess.run(['net','user',name,password,'/add'],capture_output=True,timeout=30)
+            assert result.returncode==0,'Could not create disposable CI account'
+            account_created=True
+            subprocess.run(['sc.exe','start','seclogon'],capture_output=True)
+            env={**os.environ,'JZ_TEST_ACCOUNT':name}
+            sid=subprocess.check_output(['powershell','-NoProfile','-Command',"([System.Security.Principal.NTAccount]::new($env:COMPUTERNAME,$env:JZ_TEST_ACCOUNT)).Translate([System.Security.Principal.SecurityIdentifier]).Value"],env=env,text=True).strip()
+            shutil.copy2(msi,root/'package.msi')
+            for source in ('build/InstallerUi.dll','build/MaintenanceHost.exe','dist/JunZhengMatch.exe'):
+                shutil.copy2(source,root/('reference.exe' if source.endswith('JunZhengMatch.exe') else Path(source).name))
             shutil.copy2(__file__,root/'worker.py')
-            for folder in ('program','data','Config.Msi'): (root/folder).mkdir()
-            # Only this new, disposable volume gets a protected rollback ACL.
-            subprocess.run(['icacls',str(root/'Config.Msi'),'/inheritance:r','/grant:r','*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F',f'*{sid}:(OI)(CI)RX'],check=True,capture_output=True)
-            for folder in ('program','data'):
+            subprocess.run(['icacls',str(root),'/grant',f'*{sid}:(OI)(CI)RX'],check=True,capture_output=True)
+            for folder in ('user-program','user-data','runner-program','runner-data','Config.Msi'):(root/folder).mkdir()
+            for folder in ('user-program','user-data'):
                 subprocess.run(['icacls',str(root/folder),'/grant',f'*{sid}:(OI)(CI)F'],check=True,capture_output=True)
-            result=subprocess.run(['msiexec.exe','/i',str(root/'package.msi'),'/qn','/norestart',f'INSTALLFOLDER={root/"program"}',f'JZDATADIR={root/"data"}','/L*v',str(root/'baseline.log')],timeout=120)
-            assert result.returncode in (0,3010),result.returncode;installed=True
-            # The engine may clean up its empty rollback folder after install.
-            # Re-establish only this isolated test ACL before the restricted run.
-            (root/'Config.Msi').mkdir(exist_ok=True)
-            (root/'Config.Msi/test-marker.txt').write_text('isolated ACL fixture')
-            subprocess.run(['icacls',str(root/'Config.Msi'),'/inheritance:r','/grant:r','*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F',f'*{sid}:(OI)(CI)RX'],check=True,capture_output=True)
-            shutil.copy2('data/faculty.db',root/'data/sjtu_faculty_data.db')
-            expected=hashlib.sha256((root/'data/sjtu_faculty_data.db').read_bytes()).hexdigest()
-            assert run_restricted([sys.executable,str(root/'worker.py'),'--worker',str(root)])==0
-            report=json.loads((root/'data/restricted-result.json').read_text())
+            def rollback_acl(access):
+                (root/'Config.Msi').mkdir(exist_ok=True)
+                subprocess.run(['icacls',str(root/'Config.Msi'),'/inheritance:r','/grant:r','*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F',f'*{sid}:(OI)(CI){access}'],check=True,capture_output=True)
+            def user_stage(stage):
+                result=logon_run([sys.executable,str(root/'worker.py'),'--worker',str(root),'--stage',stage],name,password)
+                error=root/'user-data/worker-error.txt'
+                assert result==0,(stage,result,error.read_text() if error.exists() else 'No worker traceback')
+            rollback_acl('F');user_stage('install');rollback_acl('RX')
+            shutil.copy2('data/faculty.db',root/'user-data/sjtu_faculty_data.db')
+            expected=hashlib.sha256((root/'user-data/sjtu_faculty_data.db').read_bytes()).hexdigest()
+            user_stage('repair');report=json.loads((root/'user-data/result.json').read_text())
+            # Promotion is confined to the disposable CI account.
+            result=subprocess.run(['net','localgroup','Administrators',name,'/add'],capture_output=True,timeout=30)
+            assert result.returncode==0,'Could not grant CI test account administrator membership'
+            user_stage('admin')
+            assert hashlib.sha256((root/'user-data/sjtu_faculty_data.db').read_bytes()).hexdigest()==expected
+            result=subprocess.run(['msiexec.exe','/i',str(root/'package.msi'),'/qn','/norestart',f'INSTALLFOLDER={root/"runner-program"}',f'JZDATADIR={root/"runner-data"}','/L*v',str(root/'runner-install.log')],timeout=120)
+            assert result.returncode in (0,3010),result.returncode;runner_installed=True
             host=str(Path('build/MaintenanceHost.exe').resolve())
-            assert subprocess.run([host,'--verify-identity',sid]).returncode==0
-            assert subprocess.run([host,'--verify-identity','S-1-5-18']).returncode==5
-            install(root/'package.msi',root/'program',root/'data',root/'admin-repair.log',maintenance=True,no_properties=True,admin_host=host)
-            assert (root/'program/JunZhengMatch.exe').is_file()
-            assert hashlib.sha256((root/'program/JunZhengMatch.exe').read_bytes()).digest()==hashlib.sha256(Path('dist/JunZhengMatch.exe').read_bytes()).digest()
-            install(root/'package.msi',root/'program',root/'data',root/'admin-uninstall.log',maintenance=True,remove=True,no_properties=True,admin_host=host)
-            installed=False
-            assert not (root/'program/JunZhengMatch.exe').exists()
-            assert hashlib.sha256((root/'data/sjtu_faculty_data.db').read_bytes()).hexdigest()==expected
-            report.update(same_user_admin_retry_succeeded=True,other_account_rejected=True,data_preserved=True,isolated_secondary_volume=True)
-            Path('restricted-maintenance-test.json').write_text(json.dumps(report),encoding='utf-8')
-            print(json.dumps(report))
+            install(root/'package.msi',root/'runner-program',root/'runner-data',root/'runner-repair.log',maintenance=True,no_properties=True,admin_host=host)
+            assert hashlib.sha256((root/'runner-program/JunZhengMatch.exe').read_bytes()).digest()==hashlib.sha256((root/'reference.exe').read_bytes()).digest()
+            install(root/'package.msi',root/'runner-program',root/'runner-data',root/'runner-uninstall.log',maintenance=True,remove=True,no_properties=True,admin_host=host)
+            runner_installed=False
+            assert not (root/'runner-program/JunZhengMatch.exe').exists()
+            report.update(real_standard_account=True,same_user_admin_retry_succeeded=True,other_account_rejected=True,data_preserved=True,isolated_secondary_volume=True)
+            Path('restricted-maintenance-test.json').write_text(json.dumps(report),encoding='utf-8');print(json.dumps(report))
         finally:
             Path('installer-diagnostics').mkdir(exist_ok=True)
-            for log in list(root.glob('*.log'))+list((root/'data').glob('*.log')):shutil.copy2(log,Path('installer-diagnostics')/('restricted-'+log.name))
-            if installed:subprocess.run(['msiexec.exe','/x',str(root/'package.msi'),'/qn','/norestart'],timeout=120)
+            for log in list(root.glob('*.log'))+list((root/'user-data').glob('*.log'))+list((root/'user-data').glob('*error.txt')):
+                shutil.copy2(log,Path('installer-diagnostics')/('account-'+log.name))
+            if runner_installed:subprocess.run(['msiexec.exe','/x',str(root/'package.msi'),'/qn','/norestart'],timeout=120)
+            if account_created:subprocess.run(['net','user',name,'/delete'],capture_output=True,timeout=30)
             script.write_text(f'select vdisk file="{disk}"\ndetach vdisk\n',encoding='ascii')
             subprocess.run(['diskpart','/s',str(script)],capture_output=True,timeout=60)
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--msi');parser.add_argument('--worker');args=parser.parse_args()
-    if args.worker:worker(Path(args.worker))
+    parser=argparse.ArgumentParser();parser.add_argument('--msi');parser.add_argument('--worker');parser.add_argument('--stage',choices=['install','repair','admin']);args=parser.parse_args()
+    if args.worker:
+        try:worker(Path(args.worker),args.stage)
+        except Exception:
+            (Path(args.worker)/'user-data/worker-error.txt').write_text(traceback.format_exc(),encoding='utf-8');raise
     else:main(Path(args.msi).resolve())

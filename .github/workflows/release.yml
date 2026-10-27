@@ -145,7 +145,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download current installed baseline' }
           $current=(Get-ChildItem current/*.msi | Select-Object -First 1).FullName
           ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -PreviousMsi $previous -FutureMsi build/newer-version-fixture.msi -CurrentMsi $current -Report installer-test.json
-      - name: Verify restricted-token maintenance on isolated secondary volume
+      - name: Verify standard-account maintenance and same-user admin retry on isolated volume
         shell: pwsh
         run: |
           python tools/verify_restricted_maintenance.py --msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi"

@@ -14,7 +14,7 @@ text=f'''## 修复
 
 ## 验证
 
-通过62项回归、Windows受限令牌维护、管理员重试和失败回滚验证，以及Docker检查。
+通过62项回归、Windows普通账户维护、管理员重试和失败回滚验证，以及Docker检查。
 
 [完整说明](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/blob/{args.version}/README.md)
 '''
