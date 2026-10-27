@@ -71,15 +71,15 @@
     </InstallExecuteSequence>
     <UI>
       <Property Id="ErrorDialog" Value="InstallerErrorDlg" />
-      <ProgressText Action="InstallValidate">正在检查安装条件</ProgressText>
-      <ProgressText Action="InstallFiles" Template="[1]">正在复制程序文件</ProgressText>
-      <ProgressText Action="CreateShortcuts" Template="[1]">正在创建快捷方式</ProgressText>
-      <ProgressText Action="WriteRegistryValues" Template="[1]">正在写入安装信息</ProgressText>
-      <ProgressText Action="ConfigureStorage">正在保存数据位置</ProgressText>
-      <ProgressText Action="PreserveStorageOnRepair">正在保留原有设置</ProgressText>
-      <ProgressText Action="RemoveExistingProducts">正在移除旧版本</ProgressText>
-      <ProgressText Action="RemoveFiles" Template="[1]">正在卸载程序文件</ProgressText>
-      <ProgressText Action="InstallFinalize">正在完成安装</ProgressText>
+      <ProgressText Action="InstallValidate" Message="正在检查安装条件" />
+      <ProgressText Action="InstallFiles" Template="[1]" Message="正在复制程序文件" />
+      <ProgressText Action="CreateShortcuts" Template="[1]" Message="正在创建快捷方式" />
+      <ProgressText Action="WriteRegistryValues" Template="[1]" Message="正在写入安装信息" />
+      <ProgressText Action="ConfigureStorage" Message="正在保存数据位置" />
+      <ProgressText Action="PreserveStorageOnRepair" Message="正在保留原有设置" />
+      <ProgressText Action="RemoveExistingProducts" Message="正在移除旧版本" />
+      <ProgressText Action="RemoveFiles" Template="[1]" Message="正在卸载程序文件" />
+      <ProgressText Action="InstallFinalize" Message="正在完成安装" />
       <TextStyle Id="DefaultFont" FaceName="Microsoft YaHei UI" Size="9" />
       <TextStyle Id="TitleFont" FaceName="Microsoft YaHei UI" Size="15" Bold="yes" />
       <Property Id="DefaultUIFont" Value="DefaultFont" />
@@ -136,7 +136,7 @@
         <Control Id="ActionText" Type="Text" X="20" Y="108" Width="380" Height="20" Text="正在准备安装…">
           <Subscribe Event="ActionText" Attribute="Text" />
         </Control>
-        <Control Id="ActionData" Type="Text" X="20" Y="132" Width="380" Height="30" Text="">
+        <Control Id="ActionData" Type="Text" X="20" Y="132" Width="380" Height="30">
           <Subscribe Event="ActionData" Attribute="Text" />
         </Control>
         <Control Id="Progress" Type="ProgressBar" X="20" Y="172" Width="380" Height="15" ProgressBlocks="yes">
