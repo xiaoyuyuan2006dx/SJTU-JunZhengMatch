@@ -42,7 +42,7 @@ int WINAPI wWinMain(HINSTANCE instance,HINSTANCE previous,LPWSTR command,int sho
     if(MsiVerifyPackageW(args[2])!=ERROR_SUCCESS) {LocalFree(args);return ERROR_INSTALL_PACKAGE_INVALID;}
     wchar_t program[MAX_PATH],parameters[33000];
     GetSystemDirectoryW(program,MAX_PATH);wcscat_s(program,MAX_PATH,L"\\msiexec.exe");
-    swprintf_s(parameters,33000,L"\"%ls\" %ls \"%ls\"",program,count==5 && !wcscmp(args[4],L"remove")?L"/x":L"/i",args[2]);
+    swprintf_s(parameters,33000,L"\"%ls\" %ls \"%ls\" /qf",program,count==5 && !wcscmp(args[4],L"remove")?L"/x":L"/i",args[2]);
     STARTUPINFOW startup={sizeof(startup)};PROCESS_INFORMATION process={0};DWORD result;
     if(!CreateProcessW(program,parameters,NULL,NULL,FALSE,0,NULL,NULL,&startup,&process))result=GetLastError();
     else {

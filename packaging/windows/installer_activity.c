@@ -52,7 +52,7 @@ static LRESULT CALLBACK activity_proc(HWND window,UINT message,WPARAM wp,LPARAM 
         GetClientRect(window,&area);
         HDC dc=CreateCompatibleDC(screen); HBITMAP bitmap=CreateCompatibleBitmap(screen,area.right,area.bottom);
         HGDIOBJ old_bitmap=SelectObject(dc,bitmap);
-        HBRUSH background=CreateSolidBrush(RGB(255,252,247));FillRect(dc,&area,background);DeleteObject(background);
+        HBRUSH background=CreateSolidBrush(RGB(255,252,249));FillRect(dc,&area,background);DeleteObject(background);
         double t=(GetTickCount64()-state->started)/1000.0;
         COLORREF colors[]={RGB(239,173,188),RGB(177,157,207),RGB(131,196,179),RGB(246,198,111)};
         int radius=max(4,area.bottom/7),gap=radius*4;
@@ -87,7 +87,7 @@ static DWORD WINAPI activity_thread(void *unused) {
     HDC parent_dc=GetDC(parent);int dpi=GetDeviceCaps(parent_dc,LOGPIXELSY);ReleaseDC(parent,parent_dc);
     state.font=CreateFontW(-MulDiv(9,dpi,72),0,0,0,FW_NORMAL,FALSE,FALSE,FALSE,DEFAULT_CHARSET,0,0,CLEARTYPE_QUALITY,0,L"Microsoft YaHei UI");
     HWND window=CreateWindowExW(0,activity_class,L"JZ_ACTIVITY frames=0",WS_CHILD|WS_VISIBLE|WS_CLIPSIBLINGS,
-        area.right*20/640,area.bottom*258/342,area.right*380/640,area.bottom*23/342,parent,NULL,module,&state);
+        area.right*20/640,area.bottom*242/342,area.right*380/640,area.bottom*23/342,parent,NULL,module,&state);
     if(window) {
         SetWindowPos(window,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
         SetTimer(window,1,33,NULL);

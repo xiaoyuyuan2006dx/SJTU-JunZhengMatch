@@ -267,7 +267,7 @@ exit 1'''
             return
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
         if direct_uninstall:
-            assert seen in ({'confirm'},{'confirm','complete'}),seen
+            assert seen in ({'confirm'},{'confirm','complete'},{'complete'}),seen
             return
         expected={'maintenance','complete'} if maintenance else {'setup','complete'}
         if seen-{'upgrade','confirm'}!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
