@@ -95,16 +95,25 @@ def worker(root,stage):
 
 
 def main(msi):
+    import winreg
     from verify_installer_ui import install
+    assert os.environ.get('GITHUB_ACTIONS')=='true','Disposable account test is CI-only'
     name='JzMaint'+secrets.token_hex(4);password='Jz!'+secrets.token_hex(4)+'Aa9'
     letter=next(x for x in 'RSTUVWXYZ' if not Path(x+':/').exists());root=Path(letter+':/')
-    account_created=False;runner_installed=False
+    account_created=False;runner_installed=False;policy=None;old_policy=None
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
         disk=Path(temp)/'maintenance.vhd';script=Path(temp)/'diskpart.txt'
         script.write_text(f'create vdisk file="{disk}" maximum=256 type=expandable\nselect vdisk file="{disk}"\nattach vdisk\ncreate partition primary\nformat fs=ntfs quick\nassign letter={letter}\n',encoding='ascii')
         result=subprocess.run(['diskpart','/s',str(script)],capture_output=True,timeout=60)
         assert root.exists(),result.stdout.decode(errors='replace')
         try:
+            # Server runners default to DisableMSI=1, unlike desktop Windows.
+            # Permit ordinary per-user installs only for this disposable test,
+            # without enabling AlwaysInstallElevated; restore on every exit.
+            policy=winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE,r'Software\Policies\Microsoft\Windows\Installer',0,winreg.KEY_QUERY_VALUE|winreg.KEY_SET_VALUE)
+            try:old_policy=winreg.QueryValueEx(policy,'DisableMSI')
+            except FileNotFoundError:pass
+            winreg.SetValueEx(policy,'DisableMSI',0,winreg.REG_DWORD,0)
             result=subprocess.run(['net','user',name,password,'/add'],capture_output=True,timeout=30)
             assert result.returncode==0,('Could not create disposable CI account',result.returncode,(result.stdout+result.stderr).decode(errors='replace').replace(password,'[redacted]'))
             account_created=True
@@ -146,6 +155,12 @@ def main(msi):
             report.update(real_standard_account=True,same_user_admin_retry_succeeded=True,other_account_rejected=True,data_preserved=True,isolated_secondary_volume=True)
             Path('restricted-maintenance-test.json').write_text(json.dumps(report),encoding='utf-8');print(json.dumps(report))
         finally:
+            if policy is not None:
+                if old_policy is None:
+                    try:winreg.DeleteValue(policy,'DisableMSI')
+                    except FileNotFoundError:pass
+                else:winreg.SetValueEx(policy,'DisableMSI',0,old_policy[1],old_policy[0])
+                winreg.CloseKey(policy)
             Path('installer-diagnostics').mkdir(exist_ok=True)
             for log in list(root.glob('*.log'))+list((root/'user-data').glob('*.log'))+list((root/'user-data').glob('*error.txt')):
                 shutil.copy2(log,Path('installer-diagnostics')/('account-'+log.name))
