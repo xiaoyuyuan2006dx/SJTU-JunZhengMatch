@@ -126,7 +126,15 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                     for _,text in windows(hwnd,include_hidden=True):
                         if text.startswith('安装日志：') and text[len('安装日志：'):].strip():discovered_log=Path(text[len('安装日志：'):].strip())
                 button=None
-                if expect_error and title in ('JunZhenMatch 安装错误','JunZhenMatch','JunZhengMatch'):
+                if direct_uninstall and title=='Windows Installer':
+                    texts=' '.join(text for _,text in windows(hwnd))
+                    if 'are you sure you want to uninstall' not in texts.lower() and '确定要卸载' not in texts:
+                        raise RuntimeError('Unexpected Windows uninstall prompt: '+texts)
+                    buttons=[text.replace('&','') for _,text in windows(hwnd)]
+                    button=next((text for text in buttons if text in ('Yes','是','是(Y)')),None)
+                    if not button:raise RuntimeError('No confirmation button: '+texts)
+                    capture(hwnd,'uninstall-confirm');seen.add('confirm')
+                elif expect_error and title in ('JunZhenMatch 安装错误','JunZhenMatch','JunZhengMatch'):
                     texts=' '.join(text for _,text in windows(hwnd))
                     if 'jz-fixture.rbf' not in texts:raise RuntimeError('Unexpected MSI error: '+texts)
                     capture(hwnd,'permission-error');seen.add('expected-error');button='取消'
@@ -226,7 +234,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
             return
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
         expected={'complete'} if direct_uninstall else ({'maintenance','complete'} if maintenance else {'setup','complete'})
-        if seen-{'upgrade'}!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
+        if seen-{'upgrade','confirm'}!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
         Path(log).with_suffix('.progress.json').write_text(json.dumps(dict(status='ok',stages=sorted(stages),positions=sorted(positions),activity_frames=sorted(activity_frames),upgrade_text=upgrade_text),ensure_ascii=False),encoding='utf-8')
     finally:
         if process.poll() is None:process.kill()
