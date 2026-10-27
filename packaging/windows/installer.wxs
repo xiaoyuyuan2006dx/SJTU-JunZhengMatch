@@ -179,6 +179,10 @@
         <Control Id="Message" Type="Text" X="20" Y="65" Width="380" Height="95" HideCondition="JZOPERATION=&quot;uninstall&quot;" Text="1. 双击桌面或开始菜单的快捷方式打开。&#10;&#10;2. 退出时，请点击程序右上角的退出图案。" Transparent="yes" />
         <Control Id="ProgramLocation" Type="Text" X="20" Y="175" Width="380" Height="40" HideCondition="JZOPERATION=&quot;uninstall&quot;" Text="程序位置：[INSTALLFOLDER]" Transparent="yes" />
         <Control Id="RemovedMessage" Type="Text" X="20" Y="75" Width="380" Height="100" Hidden="yes" ShowCondition="JZOPERATION=&quot;uninstall&quot;" Text="程序和快捷方式已移除。&#10;&#10;教师库、备份、导出结果和设置保留在原存储目录。&#10;确认不再需要后，可自行删除该数据目录。" Transparent="yes" />
+        <Control Id="RetainedDataLocation" Type="Text" X="20" Y="180" Width="380" Height="50" Hidden="yes" ShowCondition="JZOPERATION=&quot;uninstall&quot;" Text="数据位置：[JZRETAINEDDATADIR]" Transparent="yes" />
+        <Control Id="OpenData" Type="PushButton" X="20" Y="240" Width="130" Height="22" Hidden="yes" ShowCondition="JZOPERATION=&quot;uninstall&quot;" Text="打开数据文件夹">
+          <Publish Event="DoAction" Value="OpenRetainedDataFolder" Condition="JZRETAINEDDATADIR" />
+        </Control>
         <Control Id="LogLocation" Type="Text" X="20" Y="215" Width="380" Height="18" Text="安装日志：[MsiLogFileLocation]" Hidden="yes" Transparent="yes" />
         <Control Id="OpenFolder" Type="PushButton" X="155" Y="240" Width="120" Height="22" HideCondition="JZOPERATION=&quot;uninstall&quot;" Text="程序文件夹">
           <Publish Event="DoAction" Value="OpenProgramFolder" Condition="1" />
@@ -250,7 +254,8 @@
       <Custom Action="StartInstallActivity" After="DetectRelatedVersion" />
       <Custom Action="MarkDirectUninstall" Before="MarkUninstallProgress" Condition="REMOVE~=&quot;ALL&quot;" />
       <Custom Action="MarkUninstallProgress" Before="MarkUninstallCompletion" Condition="JZOPERATION=&quot;uninstall&quot;" />
-      <Custom Action="MarkUninstallCompletion" Before="ProgressDlg" Condition="JZOPERATION=&quot;uninstall&quot;" />
+      <Custom Action="MarkUninstallCompletion" Before="CaptureRetainedDataLocation" Condition="JZOPERATION=&quot;uninstall&quot;" />
+      <Custom Action="CaptureRetainedDataLocation" Before="ProgressDlg" Condition="JZOPERATION=&quot;uninstall&quot;" />
     </InstallUISequence>
     <Binary Id="InstallerUiHelper" SourceFile="$(var.UiHelperPath)" />
     <CustomAction Id="StartInstallActivity" BinaryRef="InstallerUiHelper" DllEntry="StartActivity" Return="ignore" />
@@ -259,6 +264,8 @@
     <CustomAction Id="MarkDirectUninstall" Property="JZOPERATION" Value="uninstall" />
     <CustomAction Id="MarkUninstallProgress" Property="JZPROGRESSTITLE" Value="正在卸载" />
     <CustomAction Id="MarkUninstallCompletion" Property="JZCOMPLETIONTITLE" Value="卸载完成" />
+    <CustomAction Id="CaptureRetainedDataLocation" BinaryRef="InstallerUiHelper" DllEntry="CaptureRetainedDataLocation" Return="check" />
+    <CustomAction Id="OpenRetainedDataFolder" BinaryRef="InstallerUiHelper" DllEntry="OpenRetainedDataFolder" Return="ignore" />
     <CustomAction Id="OpenExistingMaintenance" BinaryRef="InstallerUiHelper" DllEntry="OpenExistingMaintenance" Return="check" />
     <CustomAction Id="LaunchInstalledApp" FileRef="MainExe" ExeCommand="--desktop" Return="asyncNoWait" />
   </Package>

@@ -2,6 +2,7 @@
 import argparse
 import ctypes
 import json
+import os
 import re
 from ctypes import wintypes as w
 from pathlib import Path
@@ -14,7 +15,7 @@ sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
-def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False,cancel_upgrade=False,expect_newer=False,open_existing=False,direct_uninstall=False,expect_error=False):
+def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False,cancel_upgrade=False,expect_newer=False,open_existing=False,direct_uninstall=False,expect_error=False,verify_data_folder=False):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -95,6 +96,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     discovered_log=None
     stages=set();positions=set();activity_frames=set();upgrade_text=''
     existing_pid=None;existing_cancelled=False;existing_finished=False
+    folder_requested=False;folder_checked=False
     screenshots=Path('installer-ui-preview');screenshots.mkdir(exist_ok=True)
     def capture(hwnd,name):
         path=screenshots/(name+'.png')
@@ -187,9 +189,26 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                     if remove or direct_uninstall:
                         assert title=='卸载完成' and '程序和快捷方式已移除' in texts,texts
                         assert '立即打开' not in texts and '程序文件夹' not in texts and '双击桌面' not in texts,texts
+                        assert str(data).rstrip('\\').casefold() in texts.casefold(),texts
+                        assert '打开数据文件夹' in texts,texts
                         capture(hwnd,'uninstalled')
                     else:assert title=='安装完成',title;capture(hwnd,'complete')
                     button='完成';seen.add('complete')
+                    if verify_data_folder and not folder_checked:
+                        if not folder_requested:button='打开数据文件夹'
+                        else:
+                            script='''$deadline=(Get-Date).AddSeconds(15)
+while ((Get-Date) -lt $deadline) {
+  $shell=New-Object -ComObject Shell.Application
+  foreach ($window in @($shell.Windows())) {
+    try { if ($window.Document.Folder.Self.Path -eq $env:JZ_EXPECTED_RETAINED) { $window.Quit(); exit 0 } } catch {}
+  }
+  Start-Sleep -Milliseconds 200
+}
+exit 1'''
+                            result=subprocess.run(['powershell','-NoProfile','-Command',script],env={**os.environ,'JZ_EXPECTED_RETAINED':str(data)},capture_output=True,timeout=25)
+                            assert result.returncode==0,'Retained data folder did not open in Explorer: '+result.stderr.decode(errors='replace')
+                            folder_checked=True
                 elif title=='安装已取消' and (reject_paths or cancel_upgrade or expect_newer):
                     button='关闭';seen.add('cancelled')
                     pid=w.DWORD();user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid))
@@ -209,6 +228,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                             if hit!=child and not user.IsChild(child,hit):break
                             user.SetCursorPos(point.x,point.y)
                             user.mouse_event(0x0002,0,0,0,0);user.mouse_event(0x0004,0,0,0,0)
+                            if button=='打开数据文件夹':folder_requested=True
                             clicked[(hwnd,button)]=time.monotonic();print('MSI UI: '+title+' / '+button,flush=True);break
                     # Refresh the window list after an action changes modal
                     # ownership instead of clicking a stale parent immediately.
@@ -251,5 +271,5 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     for name in ('msi','app','data','log'):parser.add_argument('--'+name,required=True)
-    for name in ('maintenance','no-properties','edit-paths','remove','automatic-log','reject-paths','cancel-upgrade','expect-newer','open-existing','direct-uninstall','expect-error'):parser.add_argument('--'+name,action='store_true')
+    for name in ('maintenance','no-properties','edit-paths','remove','automatic-log','reject-paths','cancel-upgrade','expect-newer','open-existing','direct-uninstall','expect-error','verify-data-folder'):parser.add_argument('--'+name,action='store_true')
     install(**vars(parser.parse_args()))

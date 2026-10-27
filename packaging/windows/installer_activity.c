@@ -209,6 +209,28 @@ __declspec(dllexport) UINT __stdcall CheckRollbackAccess(MSIHANDLE install) {
     }
     return ERROR_SUCCESS;
 }
+__declspec(dllexport) UINT __stdcall CaptureRetainedDataLocation(MSIHANDLE install) {
+    wchar_t folder[32768]={0};DWORD bytes=sizeof(folder);
+    /* PreferenceStore mirrors every committed data_dir change here. Capture it
+       in the UI session before MSI removes product registry entries/files. */
+    if(RegGetValueW(HKEY_CURRENT_USER,L"Software\\TaroDeluxe\\JunZhenMatch",L"DataDir",RRF_RT_REG_SZ,NULL,folder,&bytes)!=ERROR_SUCCESS) {
+        DWORD length=32767;MsiGetPropertyW(install,L"JZDATADIR",folder,&length);
+    }
+    MsiSetPropertyW(install,L"JZRETAINEDDATADIR",folder);
+    return ERROR_SUCCESS;
+}
+__declspec(dllexport) UINT __stdcall OpenRetainedDataFolder(MSIHANDLE install) {
+    wchar_t folder[32768]={0};DWORD length=32767;
+    MsiGetPropertyW(install,L"JZRETAINEDDATADIR",folder,&length);
+    DWORD attributes=GetFileAttributesW(folder);
+    if(attributes==INVALID_FILE_ATTRIBUTES || !(attributes&FILE_ATTRIBUTE_DIRECTORY)) {
+        MessageBoxW(NULL,L"数据目录不存在或暂时无法访问，请按完成页显示的路径检查。",L"打开数据文件夹",MB_OK|MB_ICONINFORMATION);
+        return ERROR_SUCCESS;
+    }
+    if((INT_PTR)ShellExecuteW(NULL,L"open",folder,NULL,NULL,SW_SHOWNORMAL)<=32)
+        MessageBoxW(NULL,L"无法打开数据目录，请按完成页显示的路径，在文件资源管理器中打开。",L"打开数据文件夹",MB_OK|MB_ICONINFORMATION);
+    return ERROR_SUCCESS;
+}
 BOOL WINAPI DllMain(HINSTANCE instance,DWORD reason,LPVOID reserved) {
     (void)reserved;if(reason==DLL_PROCESS_ATTACH)module=instance;return TRUE;
 }

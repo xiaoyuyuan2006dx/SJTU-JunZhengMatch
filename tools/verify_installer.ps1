@@ -26,7 +26,7 @@ function Invoke-Quiet($package,$operation,$name,$extra=@()) {
     throw "MSI $name failed: $($process.ExitCode)"
   }
 }
-function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog,[switch]$RejectPaths,[switch]$CancelUpgrade,[switch]$ExpectNewer,[switch]$OpenExisting,[switch]$DirectUninstall,[switch]$ExpectError) {
+function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog,[switch]$RejectPaths,[switch]$CancelUpgrade,[switch]$ExpectNewer,[switch]$OpenExisting,[switch]$DirectUninstall,[switch]$ExpectError,[switch]$VerifyDataFolder) {
   $arguments=@('tools/verify_installer_ui.py','--msi',$package,'--app',$app,'--data',$data,'--log',(Join-Path $root ($name+'.log')),'--no-properties')
   if ($Maintenance) {$arguments+='--maintenance'}
   if ($EditPaths) {$arguments+='--edit-paths'}
@@ -38,6 +38,7 @@ function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$E
   if ($OpenExisting) {$arguments+='--open-existing'}
   if ($DirectUninstall) {$arguments+='--direct-uninstall'}
   if ($ExpectError) {$arguments+='--expect-error'}
+  if ($VerifyDataFolder) {$arguments+='--verify-data-folder'}
   & python @arguments
   if ($LASTEXITCODE -ne 0) { throw "Visible MSI $name failed" }
 }
@@ -116,7 +117,15 @@ try {
   if (Test-Path $stale) { throw 'Repair switched to a stale registry data directory' }
   Assert-Data $chosen $hash
   $cases+='missing_exe_repaired';$cases+='repair_preserves_settings_and_database'
-  Invoke-Wizard $msiPath $defaultApp $chosen 'default-uninstall' -Maintenance -Remove
+  # Change the stored preference after installation; completion must retain the
+  # current data path rather than the original path selected during setup.
+  $movedData=Join-Path $root 'moved data 教师库'
+  Copy-Item -LiteralPath $chosen -Destination $movedData -Recurse
+  $process=Start-Process -FilePath $exe -ArgumentList @('--configure-data',('"'+$movedData+'"'),'--no-open') -Wait -PassThru
+  if ($process.ExitCode -ne 0) { throw 'Failed to update stored data location' }
+  $chosen=$movedData;Assert-DataPath $chosen;Assert-Data $chosen $hash
+  Invoke-Wizard $msiPath $defaultApp $chosen 'default-uninstall' -Maintenance -Remove -VerifyDataFolder
+  $cases+='uninstall_shows_current_data_location_and_opens_explorer'
   $installed=$false
   if (Test-Path $exe) { throw 'GUI uninstall left the default EXE behind' }
   Assert-Data $chosen $hash
