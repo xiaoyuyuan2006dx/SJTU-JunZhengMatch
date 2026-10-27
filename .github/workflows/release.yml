@@ -33,6 +33,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
+          python -m pip install "Pillow>=10,<13"
           gh release download v1.1.1 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir probe
           $msi=(Get-ChildItem probe/*.msi | Select-Object -First 1).FullName
           $app=Join-Path $env:LOCALAPPDATA 'Programs/JunZhenMatch'
@@ -98,6 +99,7 @@ jobs:
           if ($process.ExitCode -ne 0) { throw 'EXE self-test failed' }
           if ((Get-Content exe-self-test.json | ConvertFrom-Json).status -ne 'ok') { throw 'Invalid EXE report' }
       - run: python tools/verify_app.py --exe dist/JunZhengMatch.exe --report exe-http-test.json
+      - run: python tools/verify_preview_ui.py --exe dist/JunZhengMatch.exe --report preview-ui-test.json
       - run: python tools/verify_setup_progress.py
       - run: python tools/verify_installer_errors.py --exe dist/JunZhengMatch.exe --report installer-error-handling-test.json
       - name: Download Microsoft WebView2 bootstrapper

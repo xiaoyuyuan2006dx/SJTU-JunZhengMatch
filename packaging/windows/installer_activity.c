@@ -87,10 +87,44 @@ static DWORD WINAPI activity_thread(void *unused) {
     HWND window=CreateWindowExW(0,activity_class,L"JZ_ACTIVITY frames=0",WS_CHILD|WS_VISIBLE|WS_CLIPSIBLINGS,
         area.right*20/640,area.bottom*258/342,area.right*380/640,area.bottom*23/342,parent,NULL,module,&state);
     if(window) {
+        SetWindowPos(window,HWND_TOP,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
         SetTimer(window,1,33,NULL);
         while(GetMessageW(&message,NULL,0,0)>0) {TranslateMessage(&message);DispatchMessageW(&message);}
     }
     DeleteObject(state.font);return 0;
+}
+static BOOL CALLBACK lower_background(HWND child,LPARAM parent_rect) {
+    RECT child_rect;RECT *area=(RECT*)parent_rect;GetWindowRect(child,&child_rect);
+    if(child_rect.right-child_rect.left>=(area->right-area->left)*9/10 &&
+       child_rect.bottom-child_rect.top>=(area->bottom-area->top)*9/10 &&
+       GetWindow(child,GW_HWNDNEXT)!=NULL) {
+        SetWindowPos(child,HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+    }
+    return TRUE;
+}
+static BOOL CALLBACK style_dialog(HWND window,LPARAM unused) {
+    DWORD pid=0;RECT area;(void)unused;GetWindowThreadProcessId(window,&pid);
+    if(pid==ui_pid && IsWindowVisible(window)) {
+        GetClientRect(window,&area);MapWindowPoints(window,NULL,(POINT*)&area,2);
+        EnumChildWindows(window,lower_background,(LPARAM)&area);
+    }
+    return TRUE;
+}
+static DWORD WINAPI style_thread(void *unused) {
+    HANDLE client=OpenProcess(SYNCHRONIZE,FALSE,ui_pid);BOOL activity_started=FALSE;(void)unused;
+    ULONGLONG deadline=GetTickCount64()+1800000;
+    while((!client || WaitForSingleObject(client,40)==WAIT_TIMEOUT) && GetTickCount64()<deadline) {
+        EnumWindows(style_dialog,0);
+        if(!activity_started) {
+            HWND progress=NULL;EnumWindows(find_progress,(LPARAM)&progress);
+            if(progress) {
+                HANDLE worker=CreateThread(NULL,0,activity_thread,NULL,0,NULL);
+                if(worker) {CloseHandle(worker);activity_started=TRUE;}
+            }
+        }
+        if(!client)Sleep(40);
+    }
+    if(client)CloseHandle(client);return 0;
 }
 __declspec(dllexport) UINT __stdcall StartActivity(MSIHANDLE install) {
     HMODULE pinned=NULL;wchar_t client[40]={0};DWORD length=39;
@@ -103,7 +137,7 @@ __declspec(dllexport) UINT __stdcall StartActivity(MSIHANDLE install) {
     /* MSI may unload an immediate-action DLL. Pin this UI-only helper until
        its client process exits so the animation thread never executes freed code. */
     GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS|GET_MODULE_HANDLE_EX_FLAG_PIN,(LPCWSTR)&StartActivity,&pinned);
-    HANDLE thread=CreateThread(NULL,0,activity_thread,NULL,0,NULL);
+    HANDLE thread=CreateThread(NULL,0,style_thread,NULL,0,NULL);
     if(thread)CloseHandle(thread);
     return ERROR_SUCCESS; /* Decorative UI must never fail an installation. */
 }

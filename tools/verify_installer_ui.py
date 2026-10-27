@@ -14,7 +14,7 @@ sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
-def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False,cancel_upgrade=False,expect_newer=False):
+def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False,cancel_upgrade=False,expect_newer=False,open_existing=False):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -25,6 +25,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     user.SendMessageW.argtypes=[w.HWND,w.UINT,w.WPARAM,w.LPARAM]
     user.GetClassNameW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
     user.GetWindowRect.argtypes=[w.HWND,ctypes.POINTER(w.RECT)]
+    user.GetWindowThreadProcessId.argtypes=[w.HWND,ctypes.POINTER(w.DWORD)]
     class MouseInput(ctypes.Structure):
         _fields_=[('dx',w.LONG),('dy',w.LONG),('mouseData',w.DWORD),('dwFlags',w.DWORD),('time',w.DWORD),('dwExtraInfo',ctypes.c_size_t)]
     class KeyInput(ctypes.Structure):
@@ -89,15 +90,17 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     edit_wait_started=None
     discovered_log=None
     stages=set();positions=set();activity_frames=set();upgrade_text=''
+    existing_pid=None;existing_cancelled=False;existing_finished=False
     screenshots=Path('installer-ui-preview');screenshots.mkdir(exist_ok=True)
     def capture(hwnd,name):
         path=screenshots/(name+'.png')
         if path.exists():return
         from PIL import ImageGrab
+        time.sleep(.25)  # Capture after the native dialog has completed painting.
         rect=w.RECT();user.GetWindowRect(hwnd,ctypes.byref(rect))
         ImageGrab.grab(bbox=(rect.left,rect.top,rect.right,rect.bottom)).save(path)
     try:
-        while process.poll() is None and time.monotonic()<deadline:
+        while (process.poll() is None or (open_existing and not existing_finished)) and time.monotonic()<deadline:
             for hwnd,title in windows():
                 if title=='正在安装':
                     for child,text in windows(hwnd):
@@ -137,14 +140,23 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                     upgrade_text=' '.join(text for _,text in windows(hwnd))
                     if '是否升级到 v' not in upgrade_text:raise RuntimeError('Upgrade versions were not displayed')
                 elif title=='已安装较新版本':
-                    capture(hwnd,'newer');seen.add('newer');button='取消'
+                    capture(hwnd,'newer');seen.add('newer');button='修复或卸载' if open_existing else '取消'
                     if not expect_newer:errors.append('Unexpected newer version dialog')
                 elif title=='JunZhenMatch 安装错误':
                     errors.append(' '.join(text for _,text in windows(hwnd)))
                     button='确定'
-                elif title=='JunZhenMatch 维护':capture(hwnd,'maintenance');button='卸载程序' if remove else '修复安装';seen.add('maintenance')
+                elif title=='JunZhenMatch 维护':
+                    capture(hwnd,'maintenance')
+                    if open_existing:
+                        pid=w.DWORD();user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid));existing_pid=pid.value
+                        if not any('v99.0.0' in text for _,text in windows(hwnd)):raise RuntimeError('Maintenance opened the wrong installed version')
+                        seen.add('existing-maintenance');button='取消'
+                    else:button='卸载程序' if remove else '修复安装';seen.add('maintenance')
                 elif title in ('安装完成','操作完成'):capture(hwnd,'complete');button='完成';seen.add('complete')
-                elif title=='安装已取消' and (reject_paths or cancel_upgrade or expect_newer):button='关闭';seen.add('cancelled')
+                elif title=='安装已取消' and (reject_paths or cancel_upgrade or expect_newer):
+                    button='关闭';seen.add('cancelled')
+                    pid=w.DWORD();user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid))
+                    if existing_pid and pid.value==existing_pid:existing_cancelled=True
                 elif title in ('安装失败','安装已取消'):button='关闭';errors.append(title)
                 elif title=='JunZhenMatch':
                     texts=' '.join(text for _,text in windows(hwnd))
@@ -152,7 +164,17 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                 if button and (hwnd,button) not in clicked:
                     for child,text in windows(hwnd):
                         if text.replace('&','')==button:
-                            user.PostMessageW(child,0x00F5,0,0);clicked.add((hwnd,button));print('MSI UI: '+title+' / '+button,flush=True);break
+                            rect=w.RECT();user.GetWindowRect(child,ctypes.byref(rect))
+                            user.SetForegroundWindow(hwnd)
+                            user.SetCursorPos((rect.left+rect.right)//2,(rect.top+rect.bottom)//2)
+                            user.mouse_event(0x0002,0,0,0,0);user.mouse_event(0x0004,0,0,0,0)
+                            clicked.add((hwnd,button));print('MSI UI: '+title+' / '+button,flush=True);break
+            if open_existing and existing_cancelled and process.poll() is not None:
+                matching=False
+                for hwnd,_ in windows():
+                    pid=w.DWORD();user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid))
+                    if pid.value==existing_pid:matching=True
+                existing_finished=not matching
             time.sleep(.05)
         if process.poll() is None:raise RuntimeError('Visible installer timed out; wizard stages: '+repr(seen)+'; windows: '+repr([title for _,title in windows() if title]))
         if automatic_log:
@@ -163,6 +185,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
             return
         if cancel_upgrade or expect_newer:
             expected={'cancelled','newer' if expect_newer else 'upgrade'}
+            if open_existing:expected.add('existing-maintenance')
             if process.returncode!=1602 or errors or seen!=expected:raise RuntimeError(f'Version confirmation did not cancel cleanly: {process.returncode}; {seen}; {errors}')
             return
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
@@ -176,5 +199,5 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     for name in ('msi','app','data','log'):parser.add_argument('--'+name,required=True)
-    for name in ('maintenance','no-properties','edit-paths','remove','automatic-log','reject-paths','cancel-upgrade','expect-newer'):parser.add_argument('--'+name,action='store_true')
+    for name in ('maintenance','no-properties','edit-paths','remove','automatic-log','reject-paths','cancel-upgrade','expect-newer','open-existing'):parser.add_argument('--'+name,action='store_true')
     install(**vars(parser.parse_args()))

@@ -233,14 +233,14 @@
     <InstallUISequence>
       <Show Dialog="StorageSetupDlg" After="UpgradeConfirmDlg" Condition="NOT Installed" />
       <Show Dialog="MaintenanceDlg" After="StorageSetupDlg" Condition="Installed AND NOT REMOVE" />
-      <Show Dialog="ProgressDlg" Before="StartInstallActivity" />
+      <Show Dialog="ProgressDlg" Before="ExecuteAction" />
       <Show Dialog="ExitDialog" OnExit="success" />
       <Show Dialog="FatalError" OnExit="error" />
       <Show Dialog="UserExit" OnExit="cancel" />
       <Custom Action="DetectRelatedVersion" After="FindRelatedProducts" />
       <Show Dialog="NewerVersionDlg" Before="LaunchConditions" Condition="WIX_DOWNGRADE_DETECTED" />
       <Show Dialog="UpgradeConfirmDlg" After="CostFinalize" Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
-      <Custom Action="StartInstallActivity" Before="ExecuteAction" />
+      <Custom Action="StartInstallActivity" After="DetectRelatedVersion" />
     </InstallUISequence>
     <Binary Id="InstallerUiHelper" SourceFile="$(var.UiHelperPath)" />
     <CustomAction Id="StartInstallActivity" BinaryRef="InstallerUiHelper" DllEntry="StartActivity" Return="ignore" />

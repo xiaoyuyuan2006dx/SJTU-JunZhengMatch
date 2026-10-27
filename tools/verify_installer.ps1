@@ -26,7 +26,7 @@ function Invoke-Quiet($package,$operation,$name,$extra=@()) {
     throw "MSI $name failed: $($process.ExitCode)"
   }
 }
-function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog,[switch]$RejectPaths,[switch]$CancelUpgrade,[switch]$ExpectNewer) {
+function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog,[switch]$RejectPaths,[switch]$CancelUpgrade,[switch]$ExpectNewer,[switch]$OpenExisting) {
   $arguments=@('tools/verify_installer_ui.py','--msi',$package,'--app',$app,'--data',$data,'--log',(Join-Path $root ($name+'.log')),'--no-properties')
   if ($Maintenance) {$arguments+='--maintenance'}
   if ($EditPaths) {$arguments+='--edit-paths'}
@@ -35,6 +35,7 @@ function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$E
   if ($RejectPaths) {$arguments+='--reject-paths'}
   if ($CancelUpgrade) {$arguments+='--cancel-upgrade'}
   if ($ExpectNewer) {$arguments+='--expect-newer'}
+  if ($OpenExisting) {$arguments+='--open-existing'}
   & python @arguments
   if ($LASTEXITCODE -ne 0) { throw "Visible MSI $name failed" }
 }
@@ -228,6 +229,10 @@ try {
     if (!(Test-Path $futureExe)) { throw 'Older package removed the installed newer version' }
     Assert-Data $futureData $futureHash
     $cases+='newer_installed_version_offers_maintenance_without_downgrade'
+    Invoke-Wizard $msiPath $futureApp $futureData 'open-related-maintenance' -ExpectNewer -OpenExisting
+    if (!(Test-Path $futureExe)) { throw 'Opening installed maintenance removed its EXE' }
+    Assert-Data $futureData $futureHash
+    $cases+='related_version_maintenance_opens_correct_package'
     Invoke-Wizard $futurePath $futureApp $futureData 'future-uninstall' -Maintenance -Remove
     $installed=$false
     Assert-Data $futureData $futureHash
