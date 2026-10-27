@@ -16,9 +16,9 @@ with tempfile.TemporaryDirectory() as root:
     subprocess.run(['icacls',str(folder),'/deny',f'*{sid}:(W)'],check=True,capture_output=True)
     try:
         assert check(str(folder))==5, 'Denied rollback directory was accepted'
-        assert list(folder.iterdir())==[], 'Rejected probe left a file'
     finally:
         subprocess.run(['icacls',str(folder),'/remove:d',f'*{sid}'],check=True,capture_output=True)
+    assert list(folder.iterdir())==[], 'Rejected probe left a file'
     assert check(str(folder))==0, 'Probe changed directory permissions'
 report=dict(status='ok',writable_directory_passes=True,denied_directory_rejected=True,no_acl_changes=True,no_temporary_files=True)
 Path('rollback-access-test.json').write_text(json.dumps(report),encoding='utf-8')
