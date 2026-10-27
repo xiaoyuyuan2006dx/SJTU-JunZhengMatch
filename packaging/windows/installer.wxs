@@ -7,6 +7,10 @@
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch" />
     <Property Id="JZDATADIR" Secure="yes" />
+    <Property Id="PREVIOUSINSTALLFOLDER">
+      <RegistrySearch Id="ExistingInstallDir" Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstallDir" Type="raw" />
+    </Property>
+    <SetProperty Id="INSTALLFOLDER" Action="UsePreviousInstallDir" Value="[PREVIOUSINSTALLFOLDER]" Before="CostInitialize" Sequence="both" Condition="NOT INSTALLFOLDER AND PREVIOUSINSTALLFOLDER" />
     <Property Id="PREVIOUSJZDATADIR">
       <RegistrySearch Id="ExistingDataDir" Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="DataDir" Type="raw" />
     </Property>
@@ -19,6 +23,7 @@
             <File Id="MainExe" Source="$(var.AppPath)" />
             <File Id="WebviewBootstrapper" Source="$(var.BootstrapperPath)" />
             <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstalledVersion" Type="string" Value="$(var.Version)" KeyPath="yes" />
+            <RegistryValue Root="HKCU" Key="Software\TaroDeluxe\JunZhenMatch" Name="InstallDir" Type="string" Value="[INSTALLFOLDER]" />
             <RemoveFolder Id="RemoveAppFolder" Directory="INSTALLFOLDER" On="uninstall" />
             <RemoveFolder Id="RemoveProgramsFolder" Directory="ProgramsFolder" On="uninstall" />
           </Component>
