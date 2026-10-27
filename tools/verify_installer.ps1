@@ -10,9 +10,10 @@ $installer=New-Object -ComObject WindowsInstaller.Installer
 $database=$installer.OpenDatabase($msiPath,0)
 function Get-MsiProperty($name) {
   $view=$database.OpenView(('SELECT `Value` FROM `Property` WHERE `Property`=''{0}''' -f $name))
-  $view.Execute();$record=$view.Fetch();$value=$record.StringData(1);$view.Close();return $value
+  $null=$view.Execute();$record=$view.Fetch();$value=$record.StringData(1);$null=$view.Close();return [string]$value
 }
-if ((Get-MsiProperty 'Manufacturer') -ne 'xiaoyuyuan2006dx') { throw 'Unexpected MSI publisher' }
+$publisher=Get-MsiProperty 'Manufacturer'
+if ($publisher -ne 'xiaoyuyuan2006dx') { throw "Unexpected MSI publisher: $($publisher | Out-String)" }
 $expectedVersion=Get-MsiProperty 'ProductVersion'
 $view=$database.OpenView('SELECT `Text` FROM `Control` WHERE `Dialog_`=''StorageSetupDlg'' AND `Control`=''Artwork''')
 $view.Execute();if ($view.Fetch().StringData(1) -ne 'InstallerArtwork') { throw 'Installer artwork missing' };$view.Close()
