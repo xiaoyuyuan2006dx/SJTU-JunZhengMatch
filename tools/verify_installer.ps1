@@ -90,6 +90,9 @@ try {
   Invoke-Wizard $msiPath $defaultApp $defaultData 'fresh-default' -AutomaticLog
   $installed=$true;$exe=Assert-Program $defaultApp
   Assert-DataPath $defaultData
+  $progress=Get-Content (Join-Path $root 'fresh-default.progress.json') -Raw | ConvertFrom-Json
+  if ($progress.stages.Count -lt 1 -or @($progress.positions | Where-Object {$_ -gt 0}).Count -lt 1) { throw 'MSI did not display actual stage/progress updates' }
+  Copy-Item (Join-Path $root 'fresh-default.progress.json') "$pwd/installer-progress-test.json"
   Test-Program $exe "$pwd/fresh-install-test.json"
   $chosen=Get-DataPath;$hash=Mark-Data $chosen;$settings=Get-Content $configPath -Raw
   $cases+='fresh_default_exe_runs';$cases+='automatic_install_log'
@@ -110,6 +113,23 @@ try {
   if (Test-Path $exe) { throw 'GUI uninstall left the default EXE behind' }
   Assert-Data $chosen $hash
   $cases+='gui_uninstall_preserves_data'
+
+  # Reproduce a registered-but-advertised state for this same product/version.
+  # A repair must install absent components, not request Reinstall of them.
+  $emptyApp=$defaultApp
+  $emptyData=$defaultData
+  Invoke-Quiet $msiPath '/ju' 'same-version-advertised'
+  $installed=$true
+  if (Test-Path (Join-Path $emptyApp 'JunZhengMatch.exe')) { throw 'Same version empty registration unexpectedly copied the EXE' }
+  $emptyHash=Mark-Data $emptyData
+  Invoke-Wizard $msiPath $emptyApp $emptyData 'same-version-empty-repair' -Maintenance
+  $exe=Assert-Program $emptyApp
+  Test-Program $exe "$pwd/empty-registration-repair-test.json"
+  Assert-Data $emptyData $emptyHash
+  $cases+='same_version_advertised_repair_installs_components'
+  Invoke-Wizard $msiPath $emptyApp $emptyData 'same-version-uninstall' -Maintenance -Remove
+  $installed=$false
+  Assert-Data $emptyData $emptyHash
 
   # Enter paths through the actual edit controls rather than command properties.
   $customApp=Join-Path $root '手动选择 program';$customData=Join-Path $root '手动选择 data'

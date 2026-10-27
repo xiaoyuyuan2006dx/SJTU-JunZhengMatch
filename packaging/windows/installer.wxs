@@ -70,6 +70,16 @@
       <Custom Action="PreserveStorageOnRepair" Before="InstallFinalize" Condition="Installed AND NOT REMOVE~=&quot;ALL&quot; AND $AppFiles=3" />
     </InstallExecuteSequence>
     <UI>
+      <Property Id="ErrorDialog" Value="InstallerErrorDlg" />
+      <ProgressText Action="InstallValidate">正在检查安装条件</ProgressText>
+      <ProgressText Action="InstallFiles" Template="[1]">正在复制程序文件</ProgressText>
+      <ProgressText Action="CreateShortcuts" Template="[1]">正在创建快捷方式</ProgressText>
+      <ProgressText Action="WriteRegistryValues" Template="[1]">正在写入安装信息</ProgressText>
+      <ProgressText Action="ConfigureStorage">正在保存数据位置</ProgressText>
+      <ProgressText Action="PreserveStorageOnRepair">正在保留原有设置</ProgressText>
+      <ProgressText Action="RemoveExistingProducts">正在移除旧版本</ProgressText>
+      <ProgressText Action="RemoveFiles" Template="[1]">正在卸载程序文件</ProgressText>
+      <ProgressText Action="InstallFinalize">正在完成安装</ProgressText>
       <TextStyle Id="DefaultFont" FaceName="Microsoft YaHei UI" Size="9" />
       <TextStyle Id="TitleFont" FaceName="Microsoft YaHei UI" Size="15" Bold="yes" />
       <Property Id="DefaultUIFont" Value="DefaultFont" />
@@ -107,9 +117,9 @@
         <Control Id="Intro" Type="Text" X="20" Y="65" Width="380" Height="70" Text="修复前先用退出贴纸停止后台。修复会重新安装程序文件及快捷方式，保留教师库、存储位置和用户设置。找不到程序或文件损坏时，请选择修复安装。" />
         <Control Id="Location" Type="Text" X="20" Y="145" Width="380" Height="55" Text="程序位置：[INSTALLFOLDER]" />
         <Control Id="Repair" Type="PushButton" X="85" Y="275" Width="105" Height="25" Default="yes" Text="修复安装">
-          <Publish Event="AddLocal" Value="ALL" Order="1" Condition="1" />
+          <Publish Event="AddLocal" Value="ALL" Order="1" Condition="!Complete&lt;&gt;3" />
           <Publish Event="ReinstallMode" Value="amus" Order="2" Condition="1" />
-          <Publish Event="Reinstall" Value="ALL" Order="3" Condition="1" />
+          <Publish Event="Reinstall" Value="ALL" Order="3" Condition="!Complete=3" />
           <Publish Event="EndDialog" Value="Return" Order="4" Condition="1" />
         </Control>
         <Control Id="Remove" Type="PushButton" X="200" Y="275" Width="95" Height="25" Text="卸载程序">
@@ -126,10 +136,23 @@
         <Control Id="ActionText" Type="Text" X="20" Y="108" Width="380" Height="20" Text="正在准备安装…">
           <Subscribe Event="ActionText" Attribute="Text" />
         </Control>
-        <Control Id="Progress" Type="ProgressBar" X="20" Y="145" Width="380" Height="15" ProgressBlocks="yes">
+        <Control Id="ActionData" Type="Text" X="20" Y="132" Width="380" Height="30" Text="">
+          <Subscribe Event="ActionData" Attribute="Text" />
+        </Control>
+        <Control Id="Progress" Type="ProgressBar" X="20" Y="172" Width="380" Height="15" ProgressBlocks="yes">
           <Subscribe Event="SetProgress" Attribute="Progress" />
         </Control>
-        <Control Id="TimeHint" Type="Text" X="20" Y="178" Width="380" Height="55" Text="通常约10–30秒，较慢磁盘约1分钟。此步骤不联网下载组件。缺少WebView2时，首次启动另行显示下载进度及时间说明。" />
+        <Control Id="TimeHint" Type="Text" X="20" Y="205" Width="380" Height="55" Text="通常约10–30秒，较慢磁盘约1分钟。上方显示实际步骤和安装进度，初始化期间进度可能暂时停留。此步骤不下载组件；首次启动缺少WebView2时会显示微软下载窗口。" />
+      </Dialog>
+      <Dialog Id="InstallerErrorDlg" Width="400" Height="175" Title="JunZhenMatch 安装错误" ErrorDialog="yes">
+        <Control Id="ErrorText" Type="Text" X="18" Y="18" Width="364" Height="105" NoPrefix="yes" Text="安装遇到错误。" />
+        <Control Id="O" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="确定"><Publish Event="EndDialog" Value="ErrorOk" /></Control>
+        <Control Id="C" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="取消"><Publish Event="EndDialog" Value="ErrorCancel" /></Control>
+        <Control Id="A" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="终止"><Publish Event="EndDialog" Value="ErrorAbort" /></Control>
+        <Control Id="R" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="重试"><Publish Event="EndDialog" Value="ErrorRetry" /></Control>
+        <Control Id="I" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="忽略"><Publish Event="EndDialog" Value="ErrorIgnore" /></Control>
+        <Control Id="Y" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="是"><Publish Event="EndDialog" Value="ErrorYes" /></Control>
+        <Control Id="N" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="否"><Publish Event="EndDialog" Value="ErrorNo" /></Control>
       </Dialog>
       <Dialog Id="ExitDialog" Width="640" Height="342" Title="操作完成" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />

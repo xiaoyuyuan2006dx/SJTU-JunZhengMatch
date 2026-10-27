@@ -1,6 +1,7 @@
 """Exercise the visible MSI wizard on the Windows CI desktop."""
 import argparse
 import ctypes
+import json
 from ctypes import wintypes as w
 from pathlib import Path
 import subprocess
@@ -86,9 +87,15 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     paths_edited=False
     edit_wait_started=None
     discovered_log=None
+    stages=set();positions=set()
     try:
         while process.poll() is None and time.monotonic()<deadline:
             for hwnd,title in windows():
+                if title=='正在安装':
+                    for child,text in windows(hwnd):
+                        if text in {'正在检查安装条件','正在复制程序文件','正在创建快捷方式','正在写入安装信息','正在保存数据位置','正在保留原有设置','正在移除旧版本','正在卸载程序文件','正在完成安装'}:stages.add(text)
+                        name=ctypes.create_unicode_buffer(128);user.GetClassNameW(child,name,128)
+                        if 'progress' in name.value.lower():positions.add(user.SendMessageW(child,0x0408,0,0))
                 if title in ('操作完成','安装失败'):
                     for _,text in windows(hwnd):
                         if text.startswith('安装日志：') and text[len('安装日志：'):].strip():discovered_log=Path(text[len('安装日志：'):].strip())
@@ -111,6 +118,9 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                         paths_edited=True
                         time.sleep(.3)
                 elif title=='请调整数据目录':button='返回修改';seen.add('invalid')
+                elif title=='JunZhenMatch 安装错误':
+                    errors.append(' '.join(text for _,text in windows(hwnd)))
+                    button='确定'
                 elif title=='JunZhenMatch 维护':button='卸载程序' if remove else '修复安装';seen.add('maintenance')
                 elif title in ('安装完成','操作完成'):button='完成';seen.add('complete')
                 elif title=='安装已取消' and reject_paths:button='关闭';seen.add('cancelled')
@@ -122,7 +132,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                     for child,text in windows(hwnd):
                         if text.replace('&','')==button:
                             user.PostMessageW(child,0x00F5,0,0);clicked.add((hwnd,button));print('MSI UI: '+title+' / '+button,flush=True);break
-            time.sleep(.2)
+            time.sleep(.05)
         if process.poll() is None:raise RuntimeError('Visible installer timed out; wizard stages: '+repr(seen)+'; windows: '+repr([title for _,title in windows() if title]))
         if automatic_log:
             if not discovered_log or not discovered_log.exists():raise RuntimeError('Automatic MSI log path is missing from completion/failure page')
@@ -133,6 +143,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
         expected={'maintenance','complete'} if maintenance else {'setup','complete'}
         if seen!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
+        Path(log).with_suffix('.progress.json').write_text(json.dumps(dict(status='ok',stages=sorted(stages),positions=sorted(positions)),ensure_ascii=False),encoding='utf-8')
     finally:
         if process.poll() is None:process.kill()
 
