@@ -25,6 +25,12 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     user.GetWindowRect.argtypes=[w.HWND,ctypes.POINTER(w.RECT)]
     def caption(hwnd):
         buffer=ctypes.create_unicode_buffer(4096);user.GetWindowTextW(hwnd,buffer,4096);return buffer.value
+    def edit_text(hwnd):
+        # GetWindowText deliberately does not retrieve another process's Edit
+        # contents. WM_GETTEXT is the supported cross-process control query.
+        buffer=ctypes.create_unicode_buffer(32768)
+        user.SendMessageW(hwnd,0x000D,len(buffer),ctypes.cast(buffer,ctypes.c_void_p).value)
+        return buffer.value
     def windows(parent=None):
         found=[]
         @callback
@@ -72,7 +78,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                             text_buffer=ctypes.create_unicode_buffer(value)
                             user.SendMessageW(child,0x00B1,0,-1)
                             user.SendMessageW(child,0x00C2,1,ctypes.cast(text_buffer,ctypes.c_void_p).value)
-                            if caption(child).rstrip('\\/').casefold()!=value.rstrip('\\/').casefold():raise RuntimeError('Path edit did not accept user input: '+caption(child))
+                            if edit_text(child).rstrip('\\/').casefold()!=value.rstrip('\\/').casefold():raise RuntimeError('Path edit did not accept user input: '+edit_text(child))
                         user.PostMessageW(hwnd,0x0028,0,0)
                         paths_edited=True
                         time.sleep(.3)
