@@ -7,7 +7,7 @@ import subprocess
 import time
 
 
-def install(msi,app,data,log):
+def install(msi,app,data,log,maintenance=False):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -49,11 +49,12 @@ def install(msi,app,data,log):
             time.sleep(.2)
         if process.poll() is None:raise RuntimeError('Visible installer timed out; wizard stages: '+repr(seen)+'; windows: '+repr([title for _,title in windows() if title]))
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
-        if seen!={'setup','complete'}:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
+        expected={'complete'} if maintenance else {'setup','complete'}
+        if seen!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
     finally:
         if process.poll() is None:process.kill()
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);args=parser.parse_args()
-    install(args.msi,args.app,args.data,args.log)
+    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');args=parser.parse_args()
+    install(args.msi,args.app,args.data,args.log,args.maintenance)

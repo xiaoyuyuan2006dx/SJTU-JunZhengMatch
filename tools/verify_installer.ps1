@@ -31,9 +31,10 @@ try {
     if ($process.ExitCode -notin @(0,3010)) { throw 'Previous release baseline install failed' }
     $previousInstalled=$true
     'preserve-previous-data' | Set-Content (Join-Path $previousData 'upgrade-marker.txt')
-    $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$previousPath+'"'),'/qn','/norestart','/L*v',('"'+(Join-Path $root 'previous-reopen.log')+'"')) -Wait -PassThru
+    python tools/verify_installer_ui.py --msi $previousPath --app $previousApp --data $previousData --log (Join-Path $root 'previous-reopen.log') --maintenance
+    $baselineExit=$LASTEXITCODE
     $baseline2753=[bool](Select-String -Path (Join-Path $root 'previous-reopen.log') -Pattern 'Error 2753|错误 2753|2753:')
-    Write-Host "Previous release reopen exit: $($process.ExitCode); reproduced 2753: $baseline2753"
+    Write-Host "Previous release reopen exit: $baselineExit; reproduced 2753: $baseline2753"
   }
   python tools/verify_installer_ui.py --msi $msiPath --app $app --data $data --log (Join-Path $root 'install.log')
   if ($LASTEXITCODE -ne 0) { throw 'Visible MSI install failed' }
@@ -49,10 +50,14 @@ try {
   if ([IO.Path]::GetFullPath($config.data_dir).TrimEnd('\') -ne [IO.Path]::GetFullPath($data).TrimEnd('\')) { throw "Installer data directory mismatch. Expected: $data; actual: $($config.data_dir)" }
   $originalConfig=Get-Content (Join-Path $env:USERPROFILE 'JunZhenMatch/preferences.json') -Raw
   foreach ($operation in @('reopen','repair')) {
-    $arguments=if ($operation -eq 'repair') { @('/fa',('"'+$msiPath+'"')) } else { @('/i',('"'+$msiPath+'"')) }
-    $arguments+=@('/qn','/norestart','/L*v',('"'+(Join-Path $root ($operation+'.log'))+'"'))
-    $process=Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru
-    if ($process.ExitCode -notin @(0,3010)) { Get-Content (Join-Path $root ($operation+'.log')) -Tail 100;throw "MSI $operation failed: $($process.ExitCode)" }
+    if ($operation -eq 'reopen') {
+      python tools/verify_installer_ui.py --msi $msiPath --app $app --data $data --log (Join-Path $root 'reopen.log') --maintenance
+      if ($LASTEXITCODE -ne 0) { throw 'Visible MSI reopen failed' }
+    } else {
+      $arguments=@('/fa',('"'+$msiPath+'"'),'/qn','/norestart','/L*v',('"'+(Join-Path $root 'repair.log')+'"'))
+      $process=Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru
+      if ($process.ExitCode -notin @(0,3010)) { Get-Content (Join-Path $root 'repair.log') -Tail 100;throw "MSI repair failed: $($process.ExitCode)" }
+    }
   }
   if ((Get-Content (Join-Path $env:USERPROFILE 'JunZhenMatch/preferences.json') -Raw) -ne $originalConfig) { throw 'Reopen or repair changed user settings' }
   $shortcutPath=[IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('Programs')) 'JunZhenMatch/䇹政导师匹配.lnk'))
