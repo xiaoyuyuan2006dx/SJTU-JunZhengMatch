@@ -18,7 +18,7 @@ import sys
 import tempfile
 
 
-def logon_run(arguments, name, password):
+def logon_run(arguments, name, password, elevated=False):
     adv=c.WinDLL('advapi32',use_last_error=True);kernel=c.WinDLL('kernel32',use_last_error=True)
     class STARTUP(c.Structure):
         _fields_=[('cb',w.DWORD),('reserved',w.LPWSTR),('desktop',w.LPWSTR),('title',w.LPWSTR),
@@ -31,7 +31,24 @@ def logon_run(arguments, name, password):
     adv.CreateProcessWithLogonW.argtypes=[w.LPCWSTR,w.LPCWSTR,w.LPCWSTR,w.DWORD,w.LPCWSTR,w.LPWSTR,w.DWORD,c.c_void_p,w.LPCWSTR,c.POINTER(STARTUP),c.POINTER(PROCESS)]
     startup=STARTUP();startup.cb=c.sizeof(startup);process=PROCESS()
     command=c.create_unicode_buffer(subprocess.list2cmdline(arguments))
-    if not adv.CreateProcessWithLogonW(name,'.',password,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
+    if elevated:
+        # CI cannot click UAC on the secure desktop. Launch with this same
+        # disposable user's linked full token; production uses ShellExecute runas.
+        adv.LogonUserW.argtypes=[w.LPCWSTR,w.LPCWSTR,w.LPCWSTR,w.DWORD,w.DWORD,c.POINTER(w.HANDLE)]
+        adv.GetTokenInformation.argtypes=[w.HANDLE,w.DWORD,c.c_void_p,w.DWORD,c.POINTER(w.DWORD)]
+        adv.CreateProcessWithTokenW.argtypes=[w.HANDLE,w.DWORD,w.LPCWSTR,w.LPWSTR,w.DWORD,c.c_void_p,w.LPCWSTR,c.POINTER(STARTUP),c.POINTER(PROCESS)]
+        token=w.HANDLE();linked=w.HANDLE();size=w.DWORD();full=w.DWORD()
+        if not adv.LogonUserW(name,'.',password,2,0,c.byref(token)):raise c.WinError(c.get_last_error())
+        try:
+            assert adv.GetTokenInformation(token,20,c.byref(full),c.sizeof(full),c.byref(size))
+            if not full.value:
+                if not adv.GetTokenInformation(token,19,c.byref(linked),c.sizeof(linked),c.byref(size)):raise c.WinError(c.get_last_error())
+            active=linked if linked.value else token
+            if not adv.CreateProcessWithTokenW(active,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
+        finally:
+            if linked.value:kernel.CloseHandle(linked)
+            kernel.CloseHandle(token)
+    elif not adv.CreateProcessWithLogonW(name,'.',password,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
     kernel.CloseHandle(process.thread)
     try:
         if kernel.WaitForSingleObject(process.process,180000)!=0:raise RuntimeError('Test-user maintenance timed out')
@@ -132,13 +149,13 @@ def main(msi):
                 (root/'Config.Msi').mkdir(exist_ok=True)
                 subprocess.run(['icacls',str(root/'Config.Msi'),'/inheritance:r','/grant:r','*S-1-5-18:(OI)(CI)F','*S-1-5-32-544:(OI)(CI)F',f'*{sid}:(OI)(CI){access}'],check=True,capture_output=True)
             def user_stage(stage):
-                result=logon_run([sys.executable,str(root/'worker.py'),'--worker',str(root),'--stage',stage],name,password)
+                result=logon_run([sys.executable,str(root/'worker.py'),'--worker',str(root),'--stage',stage],name,password,elevated=stage=='admin')
                 error=root/'user-data/worker-error.txt'
                 assert result==0,(stage,result,error.read_text() if error.exists() else 'No worker traceback')
             rollback_acl('F');user_stage('install');rollback_acl('RX')
             shutil.copy2('data/faculty.db',root/'user-data/sjtu_faculty_data.db')
             expected=hashlib.sha256((root/'user-data/sjtu_faculty_data.db').read_bytes()).hexdigest()
-            user_stage('repair');report=json.loads((root/'user-data/result.json').read_text())
+            user_stage('repair');report=json.loads((root/'user-data/result.json').read_text());print(json.dumps(report),flush=True)
             # Promotion is confined to the disposable CI account.
             result=subprocess.run(['net','localgroup','Administrators',name,'/add'],capture_output=True,timeout=30)
             assert result.returncode==0,'Could not grant CI test account administrator membership'
