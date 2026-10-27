@@ -153,13 +153,15 @@ try {
   Assert-Data $emptyData $emptyHash
 
   # Enter paths through the actual edit controls rather than command properties.
-  $customApp=Join-Path $root '手动选择 program';$customData=Join-Path $root '手动选择 data'
+  $customRoot=if (Test-Path D:\) {Join-Path D:\ ('jz-secondary-drive-'+[guid]::NewGuid().ToString('N'))} else {$root}
+  $customApp=Join-Path $customRoot '手动选择 program';$customData=Join-Path $root '手动选择 data'
   Invoke-Wizard $msiPath $customApp $customData 'fresh-edited-paths' -EditPaths
   $installed=$true;$exe=Assert-Program $customApp
   Assert-DataPath $customData
   $customHash=Mark-Data $customData
   Test-Program $exe "$pwd/custom-install-test.json"
   $cases+='fresh_gui_edited_paths'
+  if ($customRoot -ne $root) { $cases+='secondary_drive_install_uninstall_and_failure_rollback' }
   Invoke-Wizard $msiPath $customApp $customData 'custom-uninstall' -DirectUninstall
   $cases+='direct_uninstall_has_separate_completion'
   $installed=$false
