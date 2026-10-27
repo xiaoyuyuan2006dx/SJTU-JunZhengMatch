@@ -16,65 +16,80 @@ import sys
 import tempfile
 
 
-def run_restricted(arguments):
+def logon_run(arguments, name, password):
     adv=c.WinDLL('advapi32',use_last_error=True);kernel=c.WinDLL('kernel32',use_last_error=True)
-    class SIDATTR(c.Structure):_fields_=[('Sid',c.c_void_p),('Attributes',w.DWORD)]
     class STARTUP(c.Structure):
         _fields_=[('cb',w.DWORD),('reserved',w.LPWSTR),('desktop',w.LPWSTR),('title',w.LPWSTR),
                   ('x',w.DWORD),('y',w.DWORD),('xs',w.DWORD),('ys',w.DWORD),('xc',w.DWORD),('yc',w.DWORD),
                   ('fill',w.DWORD),('flags',w.DWORD),('show',w.WORD),('reserved2',w.WORD),('ptr',c.c_void_p),
                   ('stdin',w.HANDLE),('stdout',w.HANDLE),('stderr',w.HANDLE)]
     class PROCESS(c.Structure):_fields_=[('process',w.HANDLE),('thread',w.HANDLE),('pid',w.DWORD),('tid',w.DWORD)]
-    kernel.GetCurrentProcess.restype=w.HANDLE
     kernel.CloseHandle.argtypes=[w.HANDLE];kernel.WaitForSingleObject.argtypes=[w.HANDLE,w.DWORD]
     kernel.GetExitCodeProcess.argtypes=[w.HANDLE,c.POINTER(w.DWORD)]
-    adv.OpenProcessToken.argtypes=[w.HANDLE,w.DWORD,c.POINTER(w.HANDLE)]
-    adv.ConvertStringSidToSidW.argtypes=[w.LPCWSTR,c.POINTER(c.c_void_p)]
-    adv.CreateRestrictedToken.argtypes=[w.HANDLE,w.DWORD,w.DWORD,c.POINTER(SIDATTR),w.DWORD,c.c_void_p,w.DWORD,c.c_void_p,c.POINTER(w.HANDLE)]
-    adv.GetTokenInformation.argtypes=[w.HANDLE,c.c_int,c.c_void_p,w.DWORD,c.POINTER(w.DWORD)]
-    adv.SetTokenInformation.argtypes=[w.HANDLE,c.c_int,c.c_void_p,w.DWORD]
-    adv.CreateProcessAsUserW.argtypes=[w.HANDLE,w.LPCWSTR,w.LPWSTR,c.c_void_p,c.c_void_p,w.BOOL,w.DWORD,c.c_void_p,w.LPCWSTR,c.POINTER(STARTUP),c.POINTER(PROCESS)]
-    original=w.HANDLE();token=w.HANDLE();admin=c.c_void_p()
-    if not adv.OpenProcessToken(kernel.GetCurrentProcess(),0xF01FF,c.byref(original)):raise c.WinError(c.get_last_error())
+    adv.CreateProcessWithLogonW.argtypes=[w.LPCWSTR,w.LPCWSTR,w.LPCWSTR,w.DWORD,w.LPCWSTR,w.LPWSTR,w.DWORD,c.c_void_p,w.LPCWSTR,c.POINTER(STARTUP),c.POINTER(PROCESS)]
+    startup=STARTUP();startup.cb=c.sizeof(startup);process=PROCESS()
+    command=c.create_unicode_buffer(subprocess.list2cmdline(arguments))
+    if not adv.CreateProcessWithLogonW(name,'.',password,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
+    kernel.CloseHandle(process.thread)
     try:
-        if not adv.ConvertStringSidToSidW('S-1-5-32-544',c.byref(admin)):raise c.WinError(c.get_last_error())
-        disabled=SIDATTR(admin,0)
-        if not adv.CreateRestrictedToken(original,1,1,c.byref(disabled),0,None,0,None,c.byref(token)):raise c.WinError(c.get_last_error())
-        size=w.DWORD();adv.GetTokenInformation(token,1,None,0,c.byref(size));user=c.create_string_buffer(size.value)
-        if not adv.GetTokenInformation(token,1,user,size,c.byref(size)):raise c.WinError(c.get_last_error())
-        owner=c.c_void_p.from_buffer(user)
-        if not adv.SetTokenInformation(token,4,c.byref(owner),c.sizeof(owner)):raise c.WinError(c.get_last_error())
-        startup=STARTUP();startup.cb=c.sizeof(startup);startup.desktop='winsta0\\default';process=PROCESS()
-        command=c.create_unicode_buffer(subprocess.list2cmdline(arguments))
-        if not adv.CreateProcessAsUserW(token,None,command,None,None,False,0,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
-        kernel.CloseHandle(process.thread)
-        try:
-            if kernel.WaitForSingleObject(process.process,180000)!=0:raise RuntimeError('Restricted maintenance worker timed out')
-            code=w.DWORD();kernel.GetExitCodeProcess(process.process,c.byref(code));return code.value
-        finally:kernel.CloseHandle(process.process)
-    finally:
-        if token:kernel.CloseHandle(token)
-        kernel.CloseHandle(original)
+        if kernel.WaitForSingleObject(process.process,180000)!=0:raise RuntimeError('Test-user maintenance timed out')
+        code=w.DWORD();kernel.GetExitCodeProcess(process.process,c.byref(code));return code.value
+    finally:kernel.CloseHandle(process.process)
 
 
-def worker(root):
+def set_user_environment():
+    # CreateProcessWithLogon loads HKCU, but a NULL environment inherits the
+    # parent variables. Resolve the actual profile from the new process token.
+    adv=c.WinDLL('advapi32',use_last_error=True);kernel=c.WinDLL('kernel32');profiles=c.WinDLL('userenv')
+    kernel.GetCurrentProcess.restype=w.HANDLE;adv.OpenProcessToken.argtypes=[w.HANDLE,w.DWORD,c.POINTER(w.HANDLE)]
+    profiles.GetUserProfileDirectoryW.argtypes=[w.HANDLE,w.LPWSTR,c.POINTER(w.DWORD)];kernel.CloseHandle.argtypes=[w.HANDLE]
+    token=w.HANDLE();assert adv.OpenProcessToken(kernel.GetCurrentProcess(),8,c.byref(token))
+    try:
+        size=w.DWORD(32768);buffer=c.create_unicode_buffer(size.value)
+        assert profiles.GetUserProfileDirectoryW(token,buffer,c.byref(size));profile=Path(buffer.value)
+    finally:kernel.CloseHandle(token)
+    os.environ.update(USERPROFILE=str(profile),HOMEDRIVE=profile.drive,HOMEPATH=str(profile)[len(profile.drive):],
+                      LOCALAPPDATA=str(profile/'AppData/Local'),APPDATA=str(profile/'AppData/Roaming'),
+                      TEMP=str(profile/'AppData/Local/Temp'),TMP=str(profile/'AppData/Local/Temp'))
+    Path(os.environ['TEMP']).mkdir(parents=True,exist_ok=True)
+
+
+def worker(root,stage):
+    set_user_environment()
+    data=root/'user-data';app=root/'user-program';package=root/'package.msi'
+    if stage=='install':
+        result=subprocess.run(['msiexec.exe','/i',str(package),'/qn','/norestart',f'INSTALLFOLDER={app}',f'JZDATADIR={data}','/L*v',str(data/'install.log')],timeout=120)
+        assert result.returncode in (0,3010),result.returncode
+        return
     helper=c.WinDLL(str(root/'InstallerUi.dll'))
     probe=helper.JzRollbackDirectoryAccess;probe.argtypes=[w.LPCWSTR];probe.restype=w.DWORD
-    denied=probe(str(root/'Config.Msi'));assert denied==5,denied
-    msi=c.WinDLL('msi');session=w.UINT()
-    msi.MsiOpenPackageW.argtypes=[w.LPCWSTR,c.POINTER(w.UINT)]
-    msi.MsiSetPropertyW.argtypes=[w.UINT,w.LPCWSTR,w.LPCWSTR]
-    check=helper.CheckRollbackAccess;check.argtypes=[w.UINT];check.restype=w.UINT
-    assert msi.MsiOpenPackageW(str(root/'package.msi'),c.byref(session))==0
-    try:
-        assert msi.MsiSetPropertyW(session,'INSTALLFOLDER',str(root/'program'))==0
-        assert check(session)==0, 'Caller-token access failure still blocks maintenance'
-    finally:msi.MsiCloseHandle(session)
-    result=subprocess.run(['msiexec.exe','/fa',str(root/'package.msi'),'/qn','/norestart','/L*v',str(root/'data/restricted-repair.log')],timeout=120)
-    log=(root/'data/restricted-repair.log').read_text(encoding='utf-16',errors='replace')
-    assert result.returncode in (0,3010) or (result.returncode==1603 and '1926' in log),result.returncode
-    assert 'CustomAction CheckRollbackAccess returned actual error code 1603' not in log
-    (root/'data/restricted-result.json').write_text(json.dumps(dict(status='ok',caller_probe=denied,diagnostic_return=0,engine_exit=result.returncode)),encoding='utf-8')
+    denied=probe(str(root/'Config.Msi'))
+    if stage=='repair':
+        assert denied==5,denied
+        msi=c.WinDLL('msi');session=w.UINT()
+        msi.MsiOpenPackageW.argtypes=[w.LPCWSTR,c.POINTER(w.UINT)];msi.MsiSetPropertyW.argtypes=[w.UINT,w.LPCWSTR,w.LPCWSTR]
+        check=helper.CheckRollbackAccess;check.argtypes=[w.UINT];check.restype=w.UINT
+        assert msi.MsiOpenPackageW(str(package),c.byref(session))==0
+        try:
+            assert msi.MsiSetPropertyW(session,'INSTALLFOLDER',str(app))==0
+            assert check(session)==0,'Caller-token probe still blocks maintenance'
+        finally:msi.MsiCloseHandle(session)
+        result=subprocess.run(['msiexec.exe','/fa',str(package),'/qn','/norestart','/L*v',str(data/'standard-repair.log')],timeout=120)
+        log=(data/'standard-repair.log').read_text(encoding='utf-16',errors='replace')
+        assert result.returncode in (0,3010) or (result.returncode==1603 and '1926' in log),result.returncode
+        assert 'CustomAction CheckRollbackAccess returned actual error code 1603' not in log
+        (data/'result.json').write_text(json.dumps(dict(status='ok',caller_probe=denied,diagnostic_return=0,engine_exit=result.returncode)))
+    else:
+        assert denied==0,'New logon did not receive administrator permissions'
+        sid=subprocess.check_output(['whoami','/user','/fo','csv','/nh'],text=True).strip().split(',')[-1].strip('"')
+        host=str(root/'MaintenanceHost.exe')
+        assert subprocess.run([host,'--verify-identity',sid]).returncode==0
+        assert subprocess.run([host,'--verify-identity','S-1-5-18']).returncode==5
+        for operation,name in (('/fa','admin-repair'),('/x','admin-uninstall')):
+            result=subprocess.run(['msiexec.exe',operation,str(package),'/qn','/norestart','/L*v',str(data/(name+'.log'))],timeout=120)
+            assert result.returncode in (0,3010),(name,result.returncode)
+            if operation=='/fa':assert hashlib.sha256((app/'JunZhengMatch.exe').read_bytes()).digest()==hashlib.sha256((root/'reference.exe').read_bytes()).digest()
+        assert not (app/'JunZhengMatch.exe').exists()
 
 
 def main(msi):
