@@ -33,7 +33,11 @@ try {
     'preserve-previous-data' | Set-Content (Join-Path $previousData 'upgrade-marker.txt')
     python tools/verify_installer_ui.py --msi $previousPath --app $previousApp --data $previousData --log (Join-Path $root 'previous-reopen.log') --maintenance
     $baselineExit=$LASTEXITCODE
-    $baseline2753=[bool](Select-String -Path (Join-Path $root 'previous-reopen.log') -Pattern 'Error 2753|错误 2753|2753:')
+    # Exercise the missing component-action guard with a legal maintenance
+    # transaction. The old action runs even though its EXE is marked absent.
+    $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$previousPath+'"'),'REMOVE=Complete','/qn','/norestart','/L*v',('"'+(Join-Path $root 'previous-component-maintenance.log')+'"')) -Wait -PassThru
+    $baseline2753=[bool](Select-String -Path (Join-Path $root 'previous-component-maintenance.log') -Pattern '2753')
+    if (!$baseline2753 -or $process.ExitCode -eq 0) { throw 'Old MSI component-state regression did not reproduce 2753' }
     Write-Host "Previous release reopen exit: $baselineExit; reproduced 2753: $baseline2753"
   }
   python tools/verify_installer_ui.py --msi $msiPath --app $app --data $data --log (Join-Path $root 'install.log')
@@ -71,12 +75,18 @@ try {
   Write-Host 'Installed runtime passed; checking uninstall'
   New-Item -ItemType Directory -Force $data | Out-Null
   'preserve-user-data' | Set-Content (Join-Path $data 'user-data-marker.txt')
+  $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$msiPath+'"'),'REMOVE=Complete','/qn','/norestart','/L*v',('"'+(Join-Path $root 'component-maintenance.log')+'"')) -Wait -PassThru
+  if ($process.ExitCode -notin @(0,3010)) { throw 'Component maintenance repeated the old 2753 failure' }
+  if (Test-Path $exe) { throw 'Component maintenance did not remove its EXE' }
+  if (!(Test-Path (Join-Path $data 'user-data-marker.txt'))) { throw 'Component maintenance removed user data' }
+  $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$msiPath+'"'),'ADDLOCAL=Complete','/qn','/norestart',('INSTALLFOLDER="'+$app+'"'),('JZDATADIR="'+$data+'"'),'/L*v',('"'+(Join-Path $root 'component-restore.log')+'"')) -Wait -PassThru
+  if ($process.ExitCode -notin @(0,3010) -or !(Test-Path $exe)) { throw 'Component restoration failed' }
   $process=Start-Process msiexec.exe -ArgumentList @('/x',('"'+$msiPath+'"'),'/qn','/norestart','/L*v',('"'+(Join-Path $root 'uninstall.log')+'"')) -Wait -PassThru
   if ($process.ExitCode -notin @(0,3010)) { Get-Content (Join-Path $root 'uninstall.log') -Tail 80;throw "MSI uninstall failed: $($process.ExitCode)" }
   $installed=$false
   if (!(Test-Path (Join-Path $data 'user-data-marker.txt'))) { throw 'Uninstall removed user data' }
   if (Test-Path $exe) { throw 'Uninstall did not remove program files' }
-  @{status='ok';publisher='xiaoyuyuan2006dx';visible_wizard=$true;upgrade_from_v110=[bool]$PreviousMsi;baseline_2753=$baseline2753;reopen=$true;repair=$true;storage_selection=$true;embedded_artwork=$true;native_shortcut=$true;installed_runtime=$true;uninstall_preserves_data=$true} | ConvertTo-Json | Set-Content -Encoding utf8 $Report
+  @{status='ok';publisher='xiaoyuyuan2006dx';visible_wizard=$true;upgrade_from_v110=[bool]$PreviousMsi;baseline_2753=$baseline2753;component_maintenance=$true;reopen=$true;repair=$true;storage_selection=$true;embedded_artwork=$true;native_shortcut=$true;installed_runtime=$true;uninstall_preserves_data=$true} | ConvertTo-Json | Set-Content -Encoding utf8 $Report
 }
 finally {
   New-Item -ItemType Directory -Force installer-diagnostics | Out-Null
