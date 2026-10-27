@@ -16,6 +16,7 @@ import sys
 import sqlite3
 import os
 from pathlib import Path
+from .preferences import PreferenceStore
 
 try:
     import pandas as pd
@@ -23,8 +24,7 @@ except ImportError:
     print("需要: pip install pandas openpyxl")
     sys.exit(1)
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-DATA_DIR = Path(os.getenv("JZ_DATA_DIR", SCRIPT_DIR / "sjtu_faculty_data"))
+DATA_DIR = PreferenceStore().data_dir()
 DB_PATH = Path(os.getenv("FACULTY_DB", DATA_DIR / "sjtu_faculty_data.db"))
 
 COLUMN_MAP = {

@@ -19,7 +19,7 @@ src/junzheng_match/          应用包
   web/                      页面、样式、交互和装饰
 packaging/                  入口、依赖与PyInstaller配置
   windows/installer.wxs     每用户MSI安装包
-assets/                     内置程序图标
+assets/                     内置程序图标与安装引导插图
 examples/                   虚构示例
 data/faculty.db            网络公开教师种子库
 tests/                     回归与边界测试

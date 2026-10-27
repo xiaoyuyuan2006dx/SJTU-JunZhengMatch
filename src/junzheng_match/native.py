@@ -67,16 +67,28 @@ class DesktopBridge:
 
 
 def open_desktop(instance,profile,smoke_report=None):
+    diagnostic=None
+    if smoke_report:
+        import faulthandler
+        import logging
+        diagnostic=open(str(smoke_report)+'.log','w',encoding='utf-8',buffering=1)
+        handler=logging.StreamHandler(diagnostic)
+        logging.getLogger('pywebview').addHandler(handler)
+        logging.getLogger('pywebview').setLevel(logging.DEBUG)
+        diagnostic.write('Importing webview\n')
+        faulthandler.dump_traceback_later(90,file=diagnostic)
     import webview
     webview.settings['ALLOW_DOWNLOADS']=True
     webview.settings['ALLOW_FILE_URLS']=False
     bridge=DesktopBridge()
+    if diagnostic:diagnostic.write('Creating window\n')
     window=webview.create_window('䇹政导师匹配',instance['url']+'/?interface=desktop',js_api=bridge,width=1320,height=900,min_size=(850,600),background_color='#fffdf9')
     bridge.window=window
     result={}
     if smoke_report:
         def exercise():
             try:
+                diagnostic.write('Page loaded; checking bridge\n')
                 deadline=time.monotonic()+60
                 while time.monotonic()<deadline:
                     if window.evaluate_js('document.readyState')=='complete' and window.evaluate_js('!!window.JZReady'):break
@@ -89,7 +101,10 @@ def open_desktop(instance,profile,smoke_report=None):
             finally:window.destroy()
         window.events.loaded+=lambda:threading.Thread(target=exercise,daemon=True).start()
     gui='edgechromium' if os.name=='nt' else None
+    if diagnostic:diagnostic.write('Starting native event loop\n')
     webview.start(gui=gui,storage_path=str(Path(profile)/'webview'),private_mode=False,icon=str(paths.RESOURCE_ROOT/'assets/app.ico'))
     if smoke_report:
+        faulthandler.cancel_dump_traceback_later()
+        diagnostic.write('Native event loop ended\n');diagnostic.close()
         Path(smoke_report).write_text(json.dumps(result),encoding='utf-8')
         if result.get('status')!='ok':raise RuntimeError(result.get('error','独立窗口验证失败'))

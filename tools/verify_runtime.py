@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tempfile
 import time
@@ -30,6 +31,9 @@ def verify(executable=None,desktop=False):
                 process=subprocess.Popen(command+arguments,env=env,stdout=log,stderr=log)
                 try:process.wait(timeout=150)
                 except subprocess.TimeoutExpired:
+                    diagnostics=root/'installer-diagnostics';diagnostics.mkdir(exist_ok=True)
+                    for source in folder.rglob('*.log'):
+                        shutil.copyfile(source,diagnostics/('runtime-'+source.name))
                     if os.name=='nt':subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],stdout=log,stderr=log,timeout=20)
                     else:process.kill()
                     raise RuntimeError('Launcher timed out: '+arguments[0])
