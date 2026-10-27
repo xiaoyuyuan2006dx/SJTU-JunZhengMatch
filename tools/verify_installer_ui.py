@@ -176,7 +176,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                     if pid.value==existing_pid:matching=True
                 existing_finished=not matching
             time.sleep(.05)
-        if process.poll() is None:raise RuntimeError('Visible installer timed out; wizard stages: '+repr(seen)+'; windows: '+repr([title for _,title in windows() if title]))
+        if process.poll() is None or (open_existing and not existing_finished):raise RuntimeError('Visible installer timed out; wizard stages: '+repr(seen)+'; windows: '+repr([title for _,title in windows() if title]))
         if automatic_log:
             if not discovered_log or not discovered_log.exists():raise RuntimeError('Automatic MSI log path is missing from completion/failure page')
             shutil.copyfile(discovered_log,log)
