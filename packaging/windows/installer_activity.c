@@ -7,6 +7,7 @@
 #include <shellapi.h>
 #include <math.h>
 #include <wchar.h>
+#include <aclapi.h>
 
 static HINSTANCE module;
 static DWORD ui_pid;
@@ -17,7 +18,7 @@ static BOOL CALLBACK find_progress(HWND window,LPARAM output) {
     DWORD pid=0; wchar_t title[128];
     GetWindowThreadProcessId(window,&pid);
     GetWindowTextW(window,title,128);
-    if(pid==ui_pid && IsWindowVisible(window) && !wcscmp(title,L"正在安装")) {
+    if(pid==ui_pid && IsWindowVisible(window) && (!wcscmp(title,L"正在安装") || !wcscmp(title,L"正在卸载"))) {
         *(HWND*)output=window; return FALSE;
     }
     return TRUE;
@@ -26,7 +27,7 @@ static BOOL CALLBACK find_finished(HWND window,LPARAM output) {
     DWORD pid=0; wchar_t title[128];
     GetWindowThreadProcessId(window,&pid); GetWindowTextW(window,title,128);
     if(pid==ui_pid && IsWindowVisible(window) &&
-       (!wcscmp(title,L"操作完成") || !wcscmp(title,L"安装失败") || !wcscmp(title,L"安装已取消"))) {
+       (!wcscmp(title,L"安装完成") || !wcscmp(title,L"卸载完成") || !wcscmp(title,L"安装失败") || !wcscmp(title,L"安装已取消"))) {
         *(BOOL*)output=TRUE; return FALSE;
     }
     return TRUE;
@@ -168,6 +169,44 @@ __declspec(dllexport) UINT __stdcall OpenExistingMaintenance(MSIHANDLE install) 
     swprintf_s(args,32800,L"/i \"%ls\"",package);
     SHELLEXECUTEINFOW info={sizeof(info)};info.lpFile=program;info.lpParameters=args;info.nShow=SW_SHOWNORMAL;
     if(!ShellExecuteExW(&info))MessageBoxW(NULL,L"无法打开维护页面，请重新打开已安装版本的安装包。",L"维护已安装版本",MB_OK|MB_ICONINFORMATION);
+    return ERROR_SUCCESS;
+}
+/* Probe only a new disposable file: never alter a shared Config.Msi ACL or
+   touch another installer's rollback files. A failure must precede removal. */
+__declspec(dllexport) DWORD __stdcall JzRollbackDirectoryAccess(const wchar_t *directory) {
+    DWORD attributes=GetFileAttributesW(directory);
+    if(attributes==INVALID_FILE_ATTRIBUTES) {
+        DWORD error=GetLastError();
+        return error==ERROR_FILE_NOT_FOUND || error==ERROR_PATH_NOT_FOUND ? ERROR_SUCCESS : error;
+    }
+    if(!(attributes&FILE_ATTRIBUTE_DIRECTORY))return ERROR_DIRECTORY;
+    wchar_t file[32768];
+    swprintf_s(file,32768,L"%ls\\jz-permission-check-%lu-%llu.tmp",directory,GetCurrentProcessId(),GetTickCount64());
+    HANDLE probe=CreateFileW(file,GENERIC_READ|GENERIC_WRITE|DELETE|READ_CONTROL|WRITE_DAC,0,NULL,CREATE_NEW,
+        FILE_ATTRIBUTE_TEMPORARY|FILE_FLAG_DELETE_ON_CLOSE,NULL);
+    if(probe==INVALID_HANDLE_VALUE)return GetLastError();
+    PACL dacl=NULL;PSECURITY_DESCRIPTOR descriptor=NULL;
+    DWORD error=GetSecurityInfo(probe,SE_FILE_OBJECT,DACL_SECURITY_INFORMATION,NULL,NULL,&dacl,NULL,&descriptor);
+    if(error==ERROR_SUCCESS)error=SetSecurityInfo(probe,SE_FILE_OBJECT,DACL_SECURITY_INFORMATION,NULL,NULL,dacl,NULL);
+    if(descriptor)LocalFree(descriptor);
+    CloseHandle(probe);return error;
+}
+__declspec(dllexport) UINT __stdcall CheckRollbackAccess(MSIHANDLE install) {
+    const wchar_t *properties[]={L"INSTALLFOLDER",L"PREVIOUSINSTALLFOLDER"};
+    for(int i=0;i<2;i++) {
+        wchar_t path[32768]={0},volume[32768]={0},directory[32768];DWORD length=32767;
+        MsiGetPropertyW(install,properties[i],path,&length);
+        if(!path[0] || !GetVolumePathNameW(path,volume,32768))continue;
+        swprintf_s(directory,32768,L"%lsConfig.Msi",volume);
+        DWORD error=JzRollbackDirectoryAccess(directory);
+        if(error!=ERROR_SUCCESS) {
+            MSIHANDLE record=MsiCreateRecord(3);
+            MsiRecordSetStringW(record,0,L"无法使用 Windows 回滚目录 [2]（错误 [3]）。本次操作尚未移除程序文件。\n\n请取消，使用安装此程序的同一账户检查该目录权限；若需管理员处理，请保留安装日志。不要删除 Config.Msi 内其他程序的回滚文件。");
+            MsiRecordSetInteger(record,1,0);MsiRecordSetStringW(record,2,directory);MsiRecordSetInteger(record,3,(int)error);
+            MsiProcessMessage(install,INSTALLMESSAGE_ERROR|MB_OK,record);MsiCloseHandle(record);
+            return ERROR_INSTALL_FAILURE;
+        }
+    }
     return ERROR_SUCCESS;
 }
 BOOL WINAPI DllMain(HINSTANCE instance,DWORD reason,LPVOID reserved) {

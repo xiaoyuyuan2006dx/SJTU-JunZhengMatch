@@ -14,7 +14,7 @@ sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
-def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False,cancel_upgrade=False,expect_newer=False,open_existing=False):
+def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False,automatic_log=False,reject_paths=False,cancel_upgrade=False,expect_newer=False,open_existing=False,direct_uninstall=False,expect_error=False):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -88,7 +88,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     # quote the entire PROPERTY=value token and can open its command help UI.
     properties='' if no_properties else f' INSTALLFOLDER="{values[1]}" JZDATADIR="{values[2]}"'
     logging='' if automatic_log else f' /L*v "{values[3]}"'
-    process=subprocess.Popen(f'msiexec.exe /i "{values[0]}" /norestart{properties}{logging}')
+    process=subprocess.Popen(f'msiexec.exe {"/x" if direct_uninstall else "/i"} "{values[0]}" /norestart{properties}{logging}')
     deadline=time.monotonic()+180;clicked={};seen=set();errors=[]
     paths_edited=False
     edit_wait_started=None
@@ -112,7 +112,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     try:
         while (process.poll() is None or (open_existing and not existing_finished)) and time.monotonic()<deadline:
             for hwnd,title in windows():
-                if title=='正在安装':
+                if title in ('正在安装','正在卸载'):
                     for child,text in windows(hwnd):
                         if text in {'正在检查安装条件','正在复制程序文件','正在创建快捷方式','正在写入安装信息','正在保存数据位置','正在保留原有设置','正在移除旧版本','正在卸载程序文件','正在完成安装'}:stages.add(text)
                         name=ctypes.create_unicode_buffer(128);user.GetClassNameW(child,name,128)
@@ -122,11 +122,17 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                             if value:
                                 activity_frames.add(int(value[1]))
                                 if len(activity_frames)>=2:capture(hwnd,'progress')
-                if title in ('操作完成','安装失败'):
+                if title in ('安装完成','卸载完成','安装失败'):
                     for _,text in windows(hwnd,include_hidden=True):
                         if text.startswith('安装日志：') and text[len('安装日志：'):].strip():discovered_log=Path(text[len('安装日志：'):].strip())
                 button=None
-                if title=='JunZhenMatch 安装':
+                if expect_error and title in ('JunZhenMatch 安装错误','JunZhenMatch','JunZhengMatch'):
+                    texts=' '.join(text for _,text in windows(hwnd))
+                    if 'jz-fixture.rbf' not in texts:raise RuntimeError('Unexpected MSI error: '+texts)
+                    capture(hwnd,'permission-error');seen.add('expected-error');button='取消'
+                elif expect_error and title=='安装失败':
+                    capture(hwnd,'uninstall-failed');seen.add('failure');button='关闭'
+                elif title=='JunZhenMatch 安装':
                     capture(hwnd,'setup')
                     button='取消' if reject_paths and 'invalid' in seen else '安装';seen.add('setup')
                     if edit_paths and not paths_edited:
@@ -163,7 +169,14 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                         if process.poll() is None:continue
                         seen.add('existing-maintenance');button='取消'
                     else:button='卸载程序' if remove else '修复安装';seen.add('maintenance')
-                elif title in ('安装完成','操作完成'):capture(hwnd,'complete');button='完成';seen.add('complete')
+                elif title in ('安装完成','卸载完成'):
+                    texts=' '.join(text for _,text in windows(hwnd))
+                    if remove or direct_uninstall:
+                        assert title=='卸载完成' and '程序和快捷方式已移除' in texts,texts
+                        assert '立即打开' not in texts and '程序文件夹' not in texts and '双击桌面' not in texts,texts
+                        capture(hwnd,'uninstalled')
+                    else:assert title=='安装完成',title;capture(hwnd,'complete')
+                    button='完成';seen.add('complete')
                 elif title=='安装已取消' and (reject_paths or cancel_upgrade or expect_newer):
                     button='关闭';seen.add('cancelled')
                     pid=w.DWORD();user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid))
@@ -198,6 +211,11 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
         if automatic_log:
             if not discovered_log or not discovered_log.exists():raise RuntimeError('Automatic MSI log path is missing from completion/failure page')
             shutil.copyfile(discovered_log,log)
+        if expect_error:
+            assert process.returncode==1603 and seen=={'maintenance','expected-error','failure'},(process.returncode,seen,errors)
+            text=Path(log).read_text(encoding='utf-16')
+            assert 'Error 2814' not in text and 'Note: 1: 2814' not in text,text[-4000:]
+            return
         if reject_paths:
             if process.returncode!=1602 or errors or seen!={'setup','invalid','cancelled'}:raise RuntimeError(f'Invalid path was not rejected before installation: {process.returncode}; {seen}; {errors}')
             return
@@ -207,7 +225,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
             if process.returncode!=1602 or errors or seen!=expected:raise RuntimeError(f'Version confirmation did not cancel cleanly: {process.returncode}; {seen}; {errors}')
             return
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
-        expected={'maintenance','complete'} if maintenance else {'setup','complete'}
+        expected={'complete'} if direct_uninstall else ({'maintenance','complete'} if maintenance else {'setup','complete'})
         if seen-{'upgrade'}!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
         Path(log).with_suffix('.progress.json').write_text(json.dumps(dict(status='ok',stages=sorted(stages),positions=sorted(positions),activity_frames=sorted(activity_frames),upgrade_text=upgrade_text),ensure_ascii=False),encoding='utf-8')
     finally:
@@ -217,5 +235,5 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     for name in ('msi','app','data','log'):parser.add_argument('--'+name,required=True)
-    for name in ('maintenance','no-properties','edit-paths','remove','automatic-log','reject-paths','cancel-upgrade','expect-newer','open-existing'):parser.add_argument('--'+name,action='store_true')
+    for name in ('maintenance','no-properties','edit-paths','remove','automatic-log','reject-paths','cancel-upgrade','expect-newer','open-existing','direct-uninstall','expect-error'):parser.add_argument('--'+name,action='store_true')
     install(**vars(parser.parse_args()))

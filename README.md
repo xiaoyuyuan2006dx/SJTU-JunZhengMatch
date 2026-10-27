@@ -17,7 +17,7 @@
 
 程序和数据请选择分开的文件夹。安装通常约10–30秒，界面显示实际步骤、进度条及独立跳动的粒子；粒子是等待反馈，不代表安装百分比。首次启动仅在缺少组件时准备运行环境，通常约1–3分钟；已有环境不会显示额外安装窗口。安装失败可查看日志。
 
-默认数据位于 `%USERPROFILE%\JunZhenMatch`（C盘用户目录下），不存在时自动创建。浏览器版首次启动会提示位置，两版均可在“偏好设置”中修改存储位置及导入导出数据。教师库、导出、日志保存在此处；不保留上传原表。升级或卸载保留数据。
+默认数据位于 `%USERPROFILE%\JunZhenMatch`（C盘用户目录下），不存在时自动创建。浏览器版首次启动会提示位置，两版均可在“偏好设置”中修改存储位置及导入导出数据。教师库、导出、日志保存在此处；不保留上传原表。升级或卸载保留数据。卸载完成页会明确说明保留的数据；确认不再需要后，可自行删除数据目录。
 
 两版使用同一数据目录时共用一个后台。**关闭某个标签页或窗口只关闭当前界面，不影响另一个界面。** 右上角“退出程序”才停止共享服务；多个界面在线时会提示确认，匹配或爬取期间需等待任务结束。
 
@@ -32,7 +32,7 @@ Windows 独立窗口另安装 `packaging/requirements-desktop.txt`，运行 `pyt
 
 ```bash
 python -m pip install -r packaging/requirements-dev.txt
-python tools/build_version.py --version v1.2.0
+python tools/build_version.py --version v1.2.1
 pyinstaller --clean --noconfirm packaging/JunZhengMatch.spec
 ```
 

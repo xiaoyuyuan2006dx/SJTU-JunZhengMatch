@@ -9,6 +9,9 @@
     <Property Id="JZDATADIR" Secure="yes" />
     <Property Id="INSTALLFOLDER" Secure="yes" />
     <Property Id="MsiLogging" Value="voicewarmupx" />
+    <Property Id="JZOPERATION" Value="install" />
+    <Property Id="JZPROGRESSTITLE" Value="正在安装" />
+    <Property Id="JZCOMPLETIONTITLE" Value="安装完成" />
     <StandardDirectory Id="WindowsFolder" />
     <StandardDirectory Id="TARGETDIR">
       <Directory Id="JZDATADIR" Name="JunZhenMatchData" />
@@ -64,6 +67,7 @@
     <CustomAction Id="OpenProgramFolder" Directory="WindowsFolder" ExeCommand="&quot;[WindowsFolder]explorer.exe&quot; &quot;[INSTALLFOLDER].&quot;" Return="asyncNoWait" />
     <CustomAction Id="OpenInstallLog" Directory="WindowsFolder" ExeCommand="&quot;[WindowsFolder]explorer.exe&quot; /select,&quot;[MsiLogFileLocation]&quot;" Return="asyncNoWait" />
     <InstallExecuteSequence>
+      <Custom Action="CheckRollbackAccess" Before="InstallInitialize" Condition="Installed OR WIX_UPGRADE_DETECTED" />
       <Custom Action="RejectInvalidDataLocation" Before="RequireLocalPayload" Condition="NOT Installed AND NOT REMOVE AND (JZDATADIR ~&lt;&lt; INSTALLFOLDER)" />
       <Custom Action="RequireLocalPayload" Before="InstallInitialize" Condition="NOT REMOVE AND NOT ($AppFiles=3 OR ?AppFiles=3)" />
       <Custom Action="ConfigureStorage" Before="PreserveStorageOnRepair" Condition="NOT Installed AND NOT REMOVE~=&quot;ALL&quot; AND $AppFiles=3" />
@@ -123,16 +127,18 @@
           <Publish Event="EndDialog" Value="Return" Order="4" Condition="1" />
         </Control>
         <Control Id="Remove" Type="PushButton" X="200" Y="275" Width="95" Height="25" Text="卸载程序">
-          <Publish Event="Remove" Value="ALL" Order="1" Condition="1" />
-          <Publish Event="EndDialog" Value="Return" Order="2" Condition="1" />
+          <Publish Property="JZOPERATION" Value="uninstall" Order="1" Condition="1" />
+          <Publish Property="JZPROGRESSTITLE" Value="正在卸载" Order="2" Condition="1" />
+          <Publish Event="Remove" Value="ALL" Order="3" Condition="1" />
+          <Publish Event="EndDialog" Value="Return" Order="4" Condition="1" />
         </Control>
         <Control Id="Cancel" Type="PushButton" X="305" Y="275" Width="95" Height="25" Cancel="yes" Text="取消">
           <Publish Event="EndDialog" Value="Exit" Condition="1" />
         </Control>
       </Dialog>
-      <Dialog Id="ProgressDlg" Width="640" Height="342" Title="正在安装" Modeless="yes" NoMinimize="yes">
+      <Dialog Id="ProgressDlg" Width="640" Height="342" Title="[JZPROGRESSTITLE]" Modeless="yes" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="42" Width="380" Height="25" Text="正在安装…" Transparent="yes" />
+        <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="42" Width="380" Height="25" Text="[JZPROGRESSTITLE]…" Transparent="yes" />
         <Control Id="ActionText" Type="Text" X="20" Y="108" Width="380" Height="20" Text="正在准备安装…" Transparent="yes">
           <Subscribe Event="ActionText" Attribute="Text" />
         </Control>
@@ -145,36 +151,36 @@
         <Control Id="TimeHint" Type="Text" X="20" Y="205" Width="380" Height="55" Text="通常约10–30秒，请稍候。" Transparent="yes" />
       </Dialog>
       <Dialog Id="InstallerErrorDlg" Width="400" Height="175" Title="JunZhenMatch 安装错误" ErrorDialog="yes">
-        <Control Id="ErrorText" Type="Text" X="18" Y="18" Width="364" Height="105" NoPrefix="yes" Text="安装遇到错误。" Transparent="yes" />
-        <Control Id="O" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="确定">
+        <Control Id="ErrorText" Type="Text" TabSkip="no" X="18" Y="18" Width="364" Height="105" NoPrefix="yes" Text="安装遇到错误。" Transparent="yes" />
+        <Control Id="O" Type="PushButton" TabSkip="yes" X="285" Y="140" Width="90" Height="22" Text="确定">
           <Publish Event="EndDialog" Value="ErrorOk" />
         </Control>
-        <Control Id="C" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="取消">
+        <Control Id="C" Type="PushButton" TabSkip="yes" X="285" Y="140" Width="90" Height="22" Text="取消">
           <Publish Event="EndDialog" Value="ErrorCancel" />
         </Control>
-        <Control Id="A" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="终止">
+        <Control Id="A" Type="PushButton" TabSkip="yes" X="285" Y="140" Width="90" Height="22" Text="终止">
           <Publish Event="EndDialog" Value="ErrorAbort" />
         </Control>
-        <Control Id="R" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="重试">
+        <Control Id="R" Type="PushButton" TabSkip="yes" X="285" Y="140" Width="90" Height="22" Text="重试">
           <Publish Event="EndDialog" Value="ErrorRetry" />
         </Control>
-        <Control Id="I" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="忽略">
+        <Control Id="I" Type="PushButton" TabSkip="yes" X="285" Y="140" Width="90" Height="22" Text="忽略">
           <Publish Event="EndDialog" Value="ErrorIgnore" />
         </Control>
-        <Control Id="Y" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="是">
+        <Control Id="Y" Type="PushButton" TabSkip="yes" X="285" Y="140" Width="90" Height="22" Text="是">
           <Publish Event="EndDialog" Value="ErrorYes" />
         </Control>
-        <Control Id="N" Type="PushButton" X="285" Y="140" Width="90" Height="22" Text="否">
+        <Control Id="N" Type="PushButton" TabSkip="yes" X="285" Y="140" Width="90" Height="22" Text="否">
           <Publish Event="EndDialog" Value="ErrorNo" />
         </Control>
       </Dialog>
-      <Dialog Id="ExitDialog" Width="640" Height="342" Title="操作完成" NoMinimize="yes">
+      <Dialog Id="ExitDialog" Width="640" Height="342" Title="[JZCOMPLETIONTITLE]" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="0" Y="0" Width="640" Height="342" TabSkip="yes" Text="InstallerArtwork" />
-        <Control Id="Message" Type="Text" X="20" Y="65" Width="380" Height="95" HideCondition="REMOVE~=&quot;ALL&quot;" Text="1. 双击桌面或开始菜单的快捷方式打开。&#10;&#10;2. 退出时，请点击程序右上角的退出图案。" Transparent="yes" />
-        <Control Id="ProgramLocation" Type="Text" X="20" Y="175" Width="380" Height="40" HideCondition="REMOVE~=&quot;ALL&quot;" Text="程序位置：[INSTALLFOLDER]" Transparent="yes" />
-        <Control Id="RemovedMessage" Type="Text" X="20" Y="75" Width="380" Height="100" Hidden="yes" ShowCondition="REMOVE~=&quot;ALL&quot;" Text="程序已卸载。教师库、备份、导出结果和用户设置已保留。" Transparent="yes" />
+        <Control Id="Message" Type="Text" X="20" Y="65" Width="380" Height="95" HideCondition="JZOPERATION=&quot;uninstall&quot;" Text="1. 双击桌面或开始菜单的快捷方式打开。&#10;&#10;2. 退出时，请点击程序右上角的退出图案。" Transparent="yes" />
+        <Control Id="ProgramLocation" Type="Text" X="20" Y="175" Width="380" Height="40" HideCondition="JZOPERATION=&quot;uninstall&quot;" Text="程序位置：[INSTALLFOLDER]" Transparent="yes" />
+        <Control Id="RemovedMessage" Type="Text" X="20" Y="75" Width="380" Height="100" Hidden="yes" ShowCondition="JZOPERATION=&quot;uninstall&quot;" Text="程序和快捷方式已移除。&#10;&#10;教师库、备份、导出结果和设置保留在原存储目录。&#10;确认不再需要后，可自行删除该数据目录。" Transparent="yes" />
         <Control Id="LogLocation" Type="Text" X="20" Y="215" Width="380" Height="18" Text="安装日志：[MsiLogFileLocation]" Hidden="yes" Transparent="yes" />
-        <Control Id="OpenFolder" Type="PushButton" X="155" Y="240" Width="120" Height="22" HideCondition="REMOVE~=&quot;ALL&quot;" Text="程序文件夹">
+        <Control Id="OpenFolder" Type="PushButton" X="155" Y="240" Width="120" Height="22" HideCondition="JZOPERATION=&quot;uninstall&quot;" Text="程序文件夹">
           <Publish Event="DoAction" Value="OpenProgramFolder" Condition="1" />
         </Control>
         <Control Id="OpenLog" Type="PushButton" X="150" Y="240" Width="105" Height="22" Text="查看安装日志" Hidden="yes">
@@ -183,7 +189,7 @@
         <Control Id="Finish" Type="PushButton" X="325" Y="300" Width="75" Height="22" Default="yes" Cancel="yes" Text="完成">
           <Publish Event="EndDialog" Value="Return" />
         </Control>
-        <Control Id="Launch" Type="PushButton" X="20" Y="240" Width="120" Height="22" Text="立即打开" HideCondition="REMOVE~=&quot;ALL&quot;">
+        <Control Id="Launch" Type="PushButton" X="20" Y="240" Width="120" Height="22" Text="立即打开" HideCondition="JZOPERATION=&quot;uninstall&quot;">
           <Publish Event="DoAction" Value="LaunchInstalledApp" Order="1" Condition="1" />
           <Publish Event="EndDialog" Value="Return" Order="2" Condition="1" />
         </Control>
@@ -242,10 +248,17 @@
       <Show Dialog="NewerVersionDlg" Before="LaunchConditions" Condition="WIX_DOWNGRADE_DETECTED" />
       <Show Dialog="UpgradeConfirmDlg" After="CostFinalize" Condition="NOT Installed AND WIX_UPGRADE_DETECTED" />
       <Custom Action="StartInstallActivity" After="DetectRelatedVersion" />
+      <Custom Action="MarkDirectUninstall" Before="MarkUninstallProgress" Condition="REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="MarkUninstallProgress" Before="MarkUninstallCompletion" Condition="JZOPERATION=&quot;uninstall&quot;" />
+      <Custom Action="MarkUninstallCompletion" Before="ProgressDlg" Condition="JZOPERATION=&quot;uninstall&quot;" />
     </InstallUISequence>
     <Binary Id="InstallerUiHelper" SourceFile="$(var.UiHelperPath)" />
     <CustomAction Id="StartInstallActivity" BinaryRef="InstallerUiHelper" DllEntry="StartActivity" Return="ignore" />
     <CustomAction Id="DetectRelatedVersion" BinaryRef="InstallerUiHelper" DllEntry="DetectRelatedVersion" Return="check" />
+    <CustomAction Id="CheckRollbackAccess" BinaryRef="InstallerUiHelper" DllEntry="CheckRollbackAccess" Return="check" />
+    <CustomAction Id="MarkDirectUninstall" Property="JZOPERATION" Value="uninstall" />
+    <CustomAction Id="MarkUninstallProgress" Property="JZPROGRESSTITLE" Value="正在卸载" />
+    <CustomAction Id="MarkUninstallCompletion" Property="JZCOMPLETIONTITLE" Value="卸载完成" />
     <CustomAction Id="OpenExistingMaintenance" BinaryRef="InstallerUiHelper" DllEntry="OpenExistingMaintenance" Return="check" />
     <CustomAction Id="LaunchInstalledApp" FileRef="MainExe" ExeCommand="--desktop" Return="asyncNoWait" />
   </Package>

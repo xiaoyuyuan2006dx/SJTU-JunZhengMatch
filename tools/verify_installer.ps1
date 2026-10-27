@@ -26,7 +26,7 @@ function Invoke-Quiet($package,$operation,$name,$extra=@()) {
     throw "MSI $name failed: $($process.ExitCode)"
   }
 }
-function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog,[switch]$RejectPaths,[switch]$CancelUpgrade,[switch]$ExpectNewer,[switch]$OpenExisting) {
+function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove,[switch]$AutomaticLog,[switch]$RejectPaths,[switch]$CancelUpgrade,[switch]$ExpectNewer,[switch]$OpenExisting,[switch]$DirectUninstall,[switch]$ExpectError) {
   $arguments=@('tools/verify_installer_ui.py','--msi',$package,'--app',$app,'--data',$data,'--log',(Join-Path $root ($name+'.log')),'--no-properties')
   if ($Maintenance) {$arguments+='--maintenance'}
   if ($EditPaths) {$arguments+='--edit-paths'}
@@ -36,6 +36,8 @@ function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$E
   if ($CancelUpgrade) {$arguments+='--cancel-upgrade'}
   if ($ExpectNewer) {$arguments+='--expect-newer'}
   if ($OpenExisting) {$arguments+='--open-existing'}
+  if ($DirectUninstall) {$arguments+='--direct-uninstall'}
+  if ($ExpectError) {$arguments+='--expect-error'}
   & python @arguments
   if ($LASTEXITCODE -ne 0) { throw "Visible MSI $name failed" }
 }
@@ -158,10 +160,42 @@ try {
   $customHash=Mark-Data $customData
   Test-Program $exe "$pwd/custom-install-test.json"
   $cases+='fresh_gui_edited_paths'
-  Invoke-Wizard $msiPath $customApp $customData 'custom-uninstall' -Maintenance -Remove
+  Invoke-Wizard $msiPath $customApp $customData 'custom-uninstall' -DirectUninstall
+  $cases+='direct_uninstall_has_separate_completion'
   $installed=$false
   if (Test-Path $exe) { throw 'GUI uninstall left the custom EXE behind' }
   Assert-Data $customData $customHash
+
+  # CI-only error injection after RemoveFiles: exercise the actual 1926-style
+  # error dialog and verify rollback restores the EXE instead of claiming success.
+  $errorMsi=Join-Path $root 'uninstall-error-fixture.msi'
+  Copy-Item -LiteralPath $msiPath -Destination $errorMsi
+  $errorDb=$installer.OpenDatabase($errorMsi,1)
+  $stream=$installer.CreateRecord(2)
+  $stream.StringData(1)='TestErrorBinary'
+  $stream.SetStream(2,(Resolve-Path build/InstallerErrorFixture.dll).Path)
+  $v=$errorDb.OpenView('INSERT INTO `Binary` (`Name`,`Data`) VALUES (?,?)')
+  $v.Execute($stream);$v.Close()
+  $v=$errorDb.OpenView('INSERT INTO `CustomAction` (`Action`,`Type`,`Source`,`Target`) VALUES (''TestRollbackError'',1025,''TestErrorBinary'',''TestRollbackError'')')
+  $v.Execute();$v.Close()
+  $v=$errorDb.OpenView('SELECT `Sequence` FROM `InstallExecuteSequence` WHERE `Action`=''RemoveFiles''')
+  $v.Execute();$seq=$v.Fetch().IntegerData(1)+1;$v.Close()
+  $v=$errorDb.OpenView(('INSERT INTO `InstallExecuteSequence` (`Action`,`Condition`,`Sequence`) VALUES (''TestRollbackError'',''REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE'',{0})' -f $seq))
+  $v.Execute();$v.Close();$errorDb.Commit()
+  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($v)
+  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($errorDb)
+  Invoke-Wizard $errorMsi $customApp $customData 'error-fixture-install' -EditPaths
+  $installed=$true;$exe=Assert-Program $customApp
+  $errorHash=Mark-Data $customData
+  Invoke-Wizard $errorMsi $customApp $customData 'error-fixture-uninstall' -Maintenance -Remove -ExpectError
+  $exe=Assert-Program $customApp
+  Assert-Data $customData $errorHash
+  $cases+='permission_error_dialog_without_2814'
+  $cases+='failed_uninstall_rolls_back_program_and_keeps_data'
+  # Remove the fixture trigger through a supported public MSI property only in
+  # this disposable package so the CI machine can finish cleaning up.
+  Invoke-Quiet $errorMsi '/x' 'error-fixture-cleanup' @('UPGRADINGPRODUCTCODE=1')
+  $installed=$false
 
   # An old advertised registration has a valid MSI product registration but no
   # local EXE. Upgrading must not inherit that missing-file feature state.
