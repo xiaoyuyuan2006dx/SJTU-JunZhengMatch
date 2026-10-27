@@ -75,11 +75,15 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                         # the selected text like a user paste so MSI updates its
                         # bound properties, not just the visible control text.
                         for (_,child),value in zip(sorted(edits),[str(app),str(data)]):
+                            # MSI Edit properties are committed when the focused
+                            # field loses focus. Give each remote control focus
+                            # through its own dialog thread before editing it.
+                            user.SendMessageW(hwnd,0x0028,child,1)
                             text_buffer=ctypes.create_unicode_buffer(value)
                             user.SendMessageW(child,0x00B1,0,-1)
                             user.SendMessageW(child,0x00C2,1,ctypes.cast(text_buffer,ctypes.c_void_p).value)
                             if edit_text(child).rstrip('\\/').casefold()!=value.rstrip('\\/').casefold():raise RuntimeError('Path edit did not accept user input: '+edit_text(child))
-                        user.PostMessageW(hwnd,0x0028,0,0)
+                        user.SendMessageW(hwnd,0x0028,0,0)
                         paths_edited=True
                         time.sleep(.3)
                 elif title=='JunZhenMatch 维护':button='卸载程序' if remove else '修复安装';seen.add('maintenance')
