@@ -89,7 +89,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     properties='' if no_properties else f' INSTALLFOLDER="{values[1]}" JZDATADIR="{values[2]}"'
     logging='' if automatic_log else f' /L*v "{values[3]}"'
     process=subprocess.Popen(f'msiexec.exe /i "{values[0]}" /norestart{properties}{logging}')
-    deadline=time.monotonic()+180;clicked=set();seen=set();errors=[]
+    deadline=time.monotonic()+180;clicked={};seen=set();errors=[]
     paths_edited=False
     edit_wait_started=None
     discovered_log=None
@@ -172,7 +172,8 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                 elif title=='JunZhenMatch':
                     texts=' '.join(text for _,text in windows(hwnd))
                     if '2753' in texts:errors.append(texts);button='确定'
-                if button and user.IsWindowEnabled(hwnd) and (hwnd,button) not in clicked:
+                retry_close=button in ('完成','关闭','取消','返回修改') and time.monotonic()-clicked.get((hwnd,button),0)>1
+                if button and user.IsWindowEnabled(hwnd) and ((hwnd,button) not in clicked or retry_close):
                     for child,text in windows(hwnd):
                         if text.replace('&','')==button:
                             rect=w.RECT();user.GetWindowRect(child,ctypes.byref(rect))
@@ -182,7 +183,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                             if hit!=child and not user.IsChild(child,hit):break
                             user.SetCursorPos(point.x,point.y)
                             user.mouse_event(0x0002,0,0,0,0);user.mouse_event(0x0004,0,0,0,0)
-                            clicked.add((hwnd,button));print('MSI UI: '+title+' / '+button,flush=True);break
+                            clicked[(hwnd,button)]=time.monotonic();print('MSI UI: '+title+' / '+button,flush=True);break
                     # Refresh the window list after an action changes modal
                     # ownership instead of clicking a stale parent immediately.
                     break
