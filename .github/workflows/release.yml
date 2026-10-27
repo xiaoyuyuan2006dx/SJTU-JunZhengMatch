@@ -139,7 +139,10 @@ jobs:
           gh release download v1.1.1 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir previous
           if ($LASTEXITCODE -ne 0) { throw 'Cannot download upgrade baseline' }
           $previous=(Get-ChildItem previous/*.msi | Select-Object -First 1).FullName
-          ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -PreviousMsi $previous -FutureMsi build/newer-version-fixture.msi -Report installer-test.json
+          gh release download v1.2.0 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir current
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot download current installed baseline' }
+          $current=(Get-ChildItem current/*.msi | Select-Object -First 1).FullName
+          ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -PreviousMsi $previous -FutureMsi build/newer-version-fixture.msi -CurrentMsi $current -Report installer-test.json
       - run: python tools/verify_runtime.py --exe dist/JunZhengMatch.exe --desktop --report exe-runtime-test.json
       - uses: actions/download-artifact@v4
         with:

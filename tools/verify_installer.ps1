@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Msi,[string]$PreviousMsi,[string]$FutureMsi,[string]$Report='installer-test.json')
+param([Parameter(Mandatory=$true)][string]$Msi,[string]$PreviousMsi,[string]$FutureMsi,[string]$CurrentMsi,[string]$Report='installer-test.json')
 $ErrorActionPreference='Stop'
 $msiPath=(Resolve-Path $Msi).Path
 $root=Join-Path $env:RUNNER_TEMP ('jz-install-'+[guid]::NewGuid().ToString('N'))
@@ -253,6 +253,20 @@ try {
   $installed=$false
   if (Test-Path $exe) { throw 'Final uninstall did not remove program files' }
   Assert-Data $data $legacyHash
+  if ($CurrentMsi) {
+    $currentPath=(Resolve-Path $CurrentMsi).Path
+    $currentApp=Join-Path $root 'v120 program';$currentData=Join-Path $root 'v120 data'
+    Invoke-Quiet $currentPath '/i' 'v120-baseline' @(('INSTALLFOLDER="'+$currentApp+'"'),('JZDATADIR="'+$currentData+'"'))
+    $currentHash=Mark-Data $currentData
+    Invoke-Wizard $msiPath $currentApp $currentData 'v120-upgrade'
+    $installed=$true;$exe=Assert-Program $currentApp
+    Assert-Data $currentData $currentHash
+    Invoke-Wizard $msiPath $currentApp $currentData 'v120-upgrade-uninstall' -Maintenance -Remove
+    $installed=$false
+    if (Test-Path $exe) { throw 'Upgrade from v1.2.0 did not uninstall' }
+    Assert-Data $currentData $currentHash
+    $cases+='v120_upgrade_then_gui_uninstall'
+  }
   if ($FutureMsi) {
     $futurePath=(Resolve-Path $FutureMsi).Path
     $futureApp=Join-Path $root 'Newer version program';$futureData=Join-Path $root 'Newer version data'
