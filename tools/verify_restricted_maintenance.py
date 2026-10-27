@@ -96,7 +96,7 @@ def worker(root,stage):
 
 def main(msi):
     from verify_installer_ui import install
-    name='JzMaint'+secrets.token_hex(4);password='Jz!'+secrets.token_hex(20)+'Aa9'
+    name='JzMaint'+secrets.token_hex(4);password='Jz!'+secrets.token_hex(4)+'Aa9'
     letter=next(x for x in 'RSTUVWXYZ' if not Path(x+':/').exists());root=Path(letter+':/')
     account_created=False;runner_installed=False
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
@@ -106,7 +106,7 @@ def main(msi):
         assert root.exists(),result.stdout.decode(errors='replace')
         try:
             result=subprocess.run(['net','user',name,password,'/add'],capture_output=True,timeout=30)
-            assert result.returncode==0,'Could not create disposable CI account'
+            assert result.returncode==0,('Could not create disposable CI account',result.returncode,(result.stdout+result.stderr).decode(errors='replace').replace(password,'[redacted]'))
             account_created=True
             subprocess.run(['sc.exe','start','seclogon'],capture_output=True)
             env={**os.environ,'JZ_TEST_ACCOUNT':name}
