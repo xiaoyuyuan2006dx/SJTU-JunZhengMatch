@@ -17,3 +17,7 @@
 ## 安装引导插图
 
 用户提供的樱花琴音图片原件保存在 `assets/installer-art.png`，安装背景由 `packaging/windows/installer-background.html` 组合原图、薄荷绿／樱粉渐变及奶油色面板。构建时渲染为 `build/installer-background.bmp` 嵌入MSI，右侧立绘渐隐融入背景，不联网加载。原图不改动。
+
+## 微软运行组件
+
+MSI 随附 Microsoft WebView2 Evergreen x64 完整离线安装器，构建时从微软下载并验证数字签名，保留原文件及微软许可。该组件适用微软自身的许可，不属于本项目代码许可证的授权范围。分发方式见[微软 WebView2 分发说明](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/distribution#offline-deployment)。已有运行环境时跳过安装；浏览器便携版不需要此组件。

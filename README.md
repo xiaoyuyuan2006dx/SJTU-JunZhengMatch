@@ -28,7 +28,7 @@ python -m pip install -r packaging/requirements.txt
 python packaging/launcher.py
 ```
 
-Windows 独立窗口另安装 `packaging/requirements-desktop.txt`，运行 `python packaging/launcher.py --desktop`。编译 EXE：
+Windows 独立窗口另安装 `packaging/requirements-desktop.txt`，系统需已有 WebView2（完整 MSI 随附离线组件），运行 `python packaging/launcher.py --desktop`。编译 EXE：
 
 ```bash
 python -m pip install -r packaging/requirements-dev.txt
