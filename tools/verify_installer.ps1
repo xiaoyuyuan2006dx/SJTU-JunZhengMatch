@@ -195,6 +195,10 @@ try {
   $v.Execute();$v.Close();$errorDb.Commit()
   [void][Runtime.InteropServices.Marshal]::ReleaseComObject($v)
   [void][Runtime.InteropServices.Marshal]::ReleaseComObject($errorDb)
+  # Earlier COM views/stream records also retain storage references until GC;
+  # msiexec must not be started while the fixture is still locked for writing.
+  $v=$null;$errorDb=$null;$stream=$null
+  [GC]::Collect();[GC]::WaitForPendingFinalizers()
   Invoke-Wizard $errorMsi $customApp $customData 'error-fixture-install' -EditPaths
   $installed=$true;$exe=Assert-Program $customApp
   $errorHash=Mark-Data $customData
