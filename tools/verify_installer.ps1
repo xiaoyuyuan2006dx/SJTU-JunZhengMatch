@@ -279,17 +279,17 @@ try {
   Assert-Data $data $legacyHash
   if ($CurrentMsi) {
     $currentPath=(Resolve-Path $CurrentMsi).Path
-    $currentApp=Join-Path $root 'v121 program';$currentData=Join-Path $root 'v121 data'
-    Invoke-Quiet $currentPath '/i' 'v121-baseline' @(('INSTALLFOLDER="'+$currentApp+'"'),('JZDATADIR="'+$currentData+'"'))
+    $currentApp=Join-Path $root 'current program';$currentData=Join-Path $root 'current data'
+    Invoke-Quiet $currentPath '/i' 'current-baseline' @(('INSTALLFOLDER="'+$currentApp+'"'),('JZDATADIR="'+$currentData+'"'))
     $currentHash=Mark-Data $currentData
-    Invoke-Wizard $msiPath $currentApp $currentData 'v121-upgrade'
+    Invoke-Wizard $msiPath $currentApp $currentData 'current-upgrade'
     $installed=$true;$exe=Assert-Program $currentApp
     Assert-Data $currentData $currentHash
-    Invoke-Wizard $msiPath $currentApp $currentData 'v121-upgrade-uninstall' -Maintenance -Remove
+    Invoke-Wizard $msiPath $currentApp $currentData 'current-upgrade-uninstall' -Maintenance -Remove
     $installed=$false
     if (Test-Path $exe) { throw 'Upgrade from v1.2.1 did not uninstall' }
     Assert-Data $currentData $currentHash
-    $cases+='v121_upgrade_then_gui_uninstall'
+    $cases+='current_upgrade_then_gui_uninstall'
   }
   if ($FutureMsi) {
     $futurePath=(Resolve-Path $FutureMsi).Path
