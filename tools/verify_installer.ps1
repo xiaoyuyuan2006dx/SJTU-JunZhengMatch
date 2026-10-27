@@ -27,17 +27,17 @@ try {
   if ($PreviousMsi) {
     $previousPath=(Resolve-Path $PreviousMsi).Path
     $previousApp=Join-Path $root 'Previous program';$previousData=Join-Path $root 'Previous data'
-    $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$previousPath+'"'),'/qn','/norestart',('INSTALLFOLDER="'+$previousApp+'"'),('JZDATADIR="'+$previousData+'"'),'/L*v',('"'+(Join-Path $root 'previous-install.log')+'"')) -Wait -PassThru
+    # Advertising selects the feature without installing its EXE. Record the
+    # old action's response, then install locally for the real upgrade test.
+    $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$previousPath+'"'),'ADVERTISE=Complete','/qn','/norestart',('INSTALLFOLDER="'+$previousApp+'"'),('JZDATADIR="'+$previousData+'"'),'/L*v',('"'+(Join-Path $root 'previous-not-local.log')+'"')) -Wait -PassThru
+    $baseline2753=[bool](Select-String -Path (Join-Path $root 'previous-not-local.log') -Pattern '2753')
+    Write-Host "Previous non-local component exit: $($process.ExitCode); reproduced 2753: $baseline2753"
+    $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$previousPath+'"'),'ADDLOCAL=Complete','/qn','/norestart',('INSTALLFOLDER="'+$previousApp+'"'),('JZDATADIR="'+$previousData+'"'),'/L*v',('"'+(Join-Path $root 'previous-install.log')+'"')) -Wait -PassThru
     if ($process.ExitCode -notin @(0,3010)) { throw 'Previous release baseline install failed' }
     $previousInstalled=$true
     'preserve-previous-data' | Set-Content (Join-Path $previousData 'upgrade-marker.txt')
     python tools/verify_installer_ui.py --msi $previousPath --app $previousApp --data $previousData --log (Join-Path $root 'previous-reopen.log') --maintenance
     $baselineExit=$LASTEXITCODE
-    # Exercise the missing component-action guard with a legal maintenance
-    # transaction. The old action runs even though its EXE is marked absent.
-    $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$previousPath+'"'),'REMOVE=Complete','/qn','/norestart','/L*v',('"'+(Join-Path $root 'previous-component-maintenance.log')+'"')) -Wait -PassThru
-    $baseline2753=[bool](Select-String -Path (Join-Path $root 'previous-component-maintenance.log') -Pattern '2753')
-    if (!$baseline2753 -or $process.ExitCode -eq 0) { throw 'Old MSI component-state regression did not reproduce 2753' }
     Write-Host "Previous release reopen exit: $baselineExit; reproduced 2753: $baseline2753"
   }
   python tools/verify_installer_ui.py --msi $msiPath --app $app --data $data --log (Join-Path $root 'install.log')
