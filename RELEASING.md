@@ -22,6 +22,8 @@ git push origin main
 4. 等待 test、windows、docker、release 全部成功。
 5. 到 **Releases** 查看版本和附件。工作流先创建草稿，附件完整上传后公开。
 
+`probe_installer` 仅用于诊断已发布的安装包，正常构建或发布时保持关闭。
+
 无需本地 Windows 或 Docker，也无需手动上传 EXE。发布使用 GitHub 自动提供的工作流令牌，不要将个人令牌放入工程。版本号不能复用到不同提交。
 
 ## 标准发行文件

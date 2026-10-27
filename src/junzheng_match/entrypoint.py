@@ -54,6 +54,7 @@ def main():
     parser.add_argument('--no-open',action='store_true');parser.add_argument('--serve',action='store_true');parser.add_argument('--desktop',action='store_true')
     parser.add_argument('--launch-only',action='store_true');parser.add_argument('--desktop-smoke',action='store_true');parser.add_argument('--self-test',action='store_true');parser.add_argument('--report')
     parser.add_argument('--data-dir');parser.add_argument('--configure-data');parser.add_argument('--ensure-webview2',action='store_true');parser.add_argument('--pick-directory',action='store_true')
+    parser.add_argument('--keep-existing-settings',action='store_true')
     args=parser.parse_args()
     if args.data_dir:os.environ['JZ_DATA_DIR']=str(Path(args.data_dir).expanduser().resolve())
     if args.self_test:return self_test(args.report)
@@ -64,6 +65,11 @@ def main():
         return
     store=preferences.PreferenceStore()
     if args.configure_data:
+        if args.keep_existing_settings and store.file.exists():
+            current=store.read()  # Validate, then preserve the authoritative choice.
+            preferences.prepare_folder(store.data_dir())
+            store.remember_install_location(current)
+            return
         target=preferences.prepare_folder(args.configure_data)
         if args.ensure_webview2:
             from .native import ensure_webview2
@@ -95,8 +101,15 @@ def launch():
             (folder/'JunZhengMatch-startup-error.log').write_text(traceback.format_exc(),encoding='utf-8')
             if '--report' in sys.argv:Path(sys.argv[sys.argv.index('--report')+1]).write_text(json.dumps({'status':'error','error':str(error)}),encoding='utf-8')
         except OSError:pass
-        if os.name=='nt' and not any(arg in sys.argv for arg in ('--no-open','--serve','--self-test','--desktop-smoke','--launch-only','--configure-data')):
-            import ctypes
-            ctypes.windll.user32.MessageBoxW(0,str(error),'䇹政导师匹配',0)
+        if os.name=='nt':
+            unattended=any(arg in sys.argv for arg in ('--no-open','--serve','--self-test','--desktop-smoke','--launch-only','--configure-data'))
+            if unattended:
+                # Re-raising in a windowed PyInstaller EXE opens its own error
+                # dialog, which can hide behind MSI and block installation.
+                try:sys.stderr.write(traceback.format_exc())
+                except (OSError,AttributeError):pass
+            else:
+                import ctypes
+                ctypes.windll.user32.MessageBoxW(0,str(error),'䇹政导师匹配',0)
         else:raise
         sys.exit(1)

@@ -2,91 +2,153 @@ param([Parameter(Mandatory=$true)][string]$Msi,[string]$PreviousMsi,[string]$Rep
 $ErrorActionPreference='Stop'
 $msiPath=(Resolve-Path $Msi).Path
 $root=Join-Path $env:RUNNER_TEMP ('jz-install-'+[guid]::NewGuid().ToString('N'))
-$app=Join-Path $root 'Installed program'
-$data=Join-Path $root 'Chosen data'
 New-Item -ItemType Directory -Force $root | Out-Null
+$configPath=Join-Path $env:USERPROFILE 'JunZhenMatch/preferences.json'
+$defaultApp=Join-Path $env:LOCALAPPDATA 'Programs/JunZhenMatch'
+$defaultData=Join-Path $env:USERPROFILE 'JunZhenMatch'
 $installer=New-Object -ComObject WindowsInstaller.Installer
 $database=$installer.OpenDatabase($msiPath,0)
-$view=$database.OpenView('SELECT `Property` FROM `Control` WHERE `Dialog_`=''StorageSetupDlg'' AND `Control`=''DataPath''')
-$view.Execute();$record=$view.Fetch()
-if (!$record -or $record.StringData(1) -ne 'JZDATADIR') { throw 'Installer is missing its storage selection field' }
-$view.Close()
+function Get-MsiProperty($name) {
+  $view=$database.OpenView(('SELECT `Value` FROM `Property` WHERE `Property`=''{0}''' -f $name))
+  $view.Execute();$record=$view.Fetch();$value=$record.StringData(1);$view.Close();return $value
+}
+if ((Get-MsiProperty 'Manufacturer') -ne 'xiaoyuyuan2006dx') { throw 'Unexpected MSI publisher' }
+$expectedVersion=Get-MsiProperty 'ProductVersion'
 $view=$database.OpenView('SELECT `Text` FROM `Control` WHERE `Dialog_`=''StorageSetupDlg'' AND `Control`=''Artwork''')
-$view.Execute();$record=$view.Fetch()
-if (!$record -or $record.StringData(1) -ne 'InstallerArtwork') { throw 'Installer artwork is missing from the setup page' }
-$view.Close()
-$view=$database.OpenView('SELECT `Name` FROM `Binary` WHERE `Name`=''InstallerArtwork''')
-$view.Execute();if (!$view.Fetch()) { throw 'Installer artwork is not embedded in MSI' };$view.Close()
-$view=$database.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''Manufacturer''')
-$view.Execute();if ($view.Fetch().StringData(1) -ne 'xiaoyuyuan2006dx') { throw 'Unexpected MSI publisher' };$view.Close()
+$view.Execute();if ($view.Fetch().StringData(1) -ne 'InstallerArtwork') { throw 'Installer artwork missing' };$view.Close()
 
-$installed=$false
-$previousInstalled=$false
-$baseline2753=$false
+function Invoke-Quiet($package,$operation,$name,$extra=@()) {
+  $arguments=@($operation,('"'+$package+'"'),'/qn','/norestart')+$extra+@('/L*v',('"'+(Join-Path $root ($name+'.log'))+'"'))
+  $process=Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru
+  if ($process.ExitCode -notin @(0,3010)) {
+    Get-Content (Join-Path $root ($name+'.log')) -Tail 80
+    throw "MSI $name failed: $($process.ExitCode)"
+  }
+}
+function Invoke-Wizard($package,$app,$data,$name,[switch]$Maintenance,[switch]$EditPaths,[switch]$Remove) {
+  $arguments=@('tools/verify_installer_ui.py','--msi',$package,'--app',$app,'--data',$data,'--log',(Join-Path $root ($name+'.log')),'--no-properties')
+  if ($Maintenance) {$arguments+='--maintenance'}
+  if ($EditPaths) {$arguments+='--edit-paths'}
+  if ($Remove) {$arguments+='--remove'}
+  & python @arguments
+  if ($LASTEXITCODE -ne 0) { throw "Visible MSI $name failed" }
+}
+function Assert-Program($app) {
+  $exe=Join-Path $app 'JunZhengMatch.exe'
+  if (!(Test-Path -LiteralPath $exe)) { throw "Installer reported success without an EXE: $exe" }
+  if ((Get-Item -LiteralPath $exe).VersionInfo.ProductVersion -ne $expectedVersion) { throw 'Installed program version mismatch' }
+  return $exe
+}
+function Get-DataPath {
+  return (Get-Content -LiteralPath $configPath -Raw | ConvertFrom-Json).data_dir
+}
+function Assert-DataPath($expected) {
+  if ([IO.Path]::GetFullPath((Get-DataPath)).TrimEnd('\') -ne [IO.Path]::GetFullPath($expected).TrimEnd('\')) { throw "Data selection mismatch: $(Get-DataPath); expected $expected" }
+}
+function Mark-Data($data) {
+  New-Item -ItemType Directory -Force $data | Out-Null
+  $db=Join-Path $data 'sjtu_faculty_data.db'
+  if (!(Test-Path -LiteralPath $db)) { Copy-Item -LiteralPath data/faculty.db -Destination $db }
+  'preserve-user-data' | Set-Content -LiteralPath (Join-Path $data 'user-data-marker.txt')
+  return (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash
+}
+function Assert-Data($data,$hash) {
+  if (!(Test-Path -LiteralPath (Join-Path $data 'user-data-marker.txt'))) { throw 'User data marker was removed' }
+  if ((Get-FileHash -LiteralPath (Join-Path $data 'sjtu_faculty_data.db') -Algorithm SHA256).Hash -ne $hash) { throw 'User database changed during maintenance' }
+}
+function Test-Program($exe,$reportPath) {
+  $process=Start-Process -FilePath $exe -ArgumentList @('--self-test','--report',('"'+$reportPath+'"')) -Wait -PassThru
+  if ($process.ExitCode -ne 0 -or (Get-Content -LiteralPath $reportPath -Raw | ConvertFrom-Json).status -ne 'ok') { throw 'Installed EXE cannot run' }
+}
+$installed=$false;$previousInstalled=$false;$cases=@()
 try {
+  # Fresh default installation, exactly like double-clicking. No INSTALLFOLDER,
+  # JZDATADIR, ADDLOCAL or REINSTALL properties are injected into the MSI.
+  if (Test-Path (Join-Path $defaultApp 'JunZhengMatch.exe')) { throw 'Windows test machine is not clean' }
+  Invoke-Wizard $msiPath $defaultApp $defaultData 'fresh-default'
+  $installed=$true;$exe=Assert-Program $defaultApp
+  Test-Program $exe "$pwd/fresh-install-test.json"
+  $chosen=Get-DataPath;$hash=Mark-Data $chosen;$settings=Get-Content $configPath -Raw
+  $cases+='fresh_default_exe_runs'
+
+  # Reproduce the user's visible state: registered as installed, EXE gone.
+  Remove-Item -LiteralPath $exe -Force
+  $stale=Join-Path $root 'stale-registry-location'
+  Set-ItemProperty -Path 'HKCU:\Software\TaroDeluxe\JunZhenMatch' -Name DataDir -Value $stale
+  Invoke-Wizard $msiPath $defaultApp $chosen 'repair-missing-exe' -Maintenance
+  $exe=Assert-Program $defaultApp
+  Test-Program $exe "$pwd/fresh-repair-test.json"
+  if ((Get-Content $configPath -Raw) -ne $settings) { throw 'Repair rewrote user preferences' }
+  if (Test-Path $stale) { throw 'Repair switched to a stale registry data directory' }
+  Assert-Data $chosen $hash
+  $cases+='missing_exe_repaired';$cases+='repair_preserves_settings_and_database'
+  Invoke-Wizard $msiPath $defaultApp $chosen 'default-uninstall' -Maintenance -Remove
+  $installed=$false
+  if (Test-Path $exe) { throw 'GUI uninstall left the default EXE behind' }
+  Assert-Data $chosen $hash
+  $cases+='gui_uninstall_preserves_data'
+
+  # Enter paths through the actual edit controls rather than command properties.
+  $customApp=Join-Path $root '手动选择 program';$customData=Join-Path $root '手动选择 data'
+  Invoke-Wizard $msiPath $customApp $customData 'fresh-edited-paths' -EditPaths
+  $installed=$true;$exe=Assert-Program $customApp
+  Assert-DataPath $customData
+  $customHash=Mark-Data $customData
+  Test-Program $exe "$pwd/custom-install-test.json"
+  $cases+='fresh_gui_edited_paths'
+  Invoke-Wizard $msiPath $customApp $customData 'custom-uninstall' -Maintenance -Remove
+  $installed=$false
+  if (Test-Path $exe) { throw 'GUI uninstall left the custom EXE behind' }
+  Assert-Data $customData $customHash
+
+  # An old advertised registration has a valid MSI product registration but no
+  # local EXE. Upgrading must not inherit that missing-file feature state.
+  $legacyEmpty=$false
   if ($PreviousMsi) {
     $previousPath=(Resolve-Path $PreviousMsi).Path
-    $previousApp=Join-Path $root 'Previous program';$previousData=Join-Path $root 'Previous data'
-    # Advertising selects the feature without installing its EXE. Record the
-    # old action's response, then install locally for the real upgrade test.
-    $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$previousPath+'"'),'ADVERTISE=Complete','/qn','/norestart',('INSTALLFOLDER="'+$previousApp+'"'),('JZDATADIR="'+$previousData+'"'),'/L*v',('"'+(Join-Path $root 'previous-not-local.log')+'"')) -Wait -PassThru
-    $baseline2753=[bool](Select-String -Path (Join-Path $root 'previous-not-local.log') -Pattern '2753')
-    Write-Host "Previous non-local component exit: $($process.ExitCode); reproduced 2753: $baseline2753"
-    $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$previousPath+'"'),'ADDLOCAL=Complete','/qn','/norestart',('INSTALLFOLDER="'+$previousApp+'"'),('JZDATADIR="'+$previousData+'"'),'/L*v',('"'+(Join-Path $root 'previous-install.log')+'"')) -Wait -PassThru
-    if ($process.ExitCode -notin @(0,3010)) { throw 'Previous release baseline install failed' }
+    $legacyDatabase=$installer.OpenDatabase($previousPath,0)
+    $legacyView=$legacyDatabase.OpenView('SELECT `Value` FROM `Property` WHERE `Property`=''ProductCode''')
+    $legacyView.Execute();$legacyCode=$legacyView.Fetch().StringData(1);$legacyView.Close()
+    $previousApp=Join-Path $root 'Legacy empty program'
+    $previousData=Join-Path $root 'Legacy teacher data'
+    $legacyHash=Mark-Data $previousData
+    Invoke-Quiet $previousPath '/i' 'legacy-empty-registration' @('ADVERTISE=Complete',('INSTALLFOLDER="'+$previousApp+'"'),('JZDATADIR="'+$previousData+'"'))
     $previousInstalled=$true
-    'preserve-previous-data' | Set-Content (Join-Path $previousData 'upgrade-marker.txt')
-    python tools/verify_installer_ui.py --msi $previousPath --app $previousApp --data $previousData --log (Join-Path $root 'previous-reopen.log') --maintenance
-    $baselineExit=$LASTEXITCODE
-    Write-Host "Previous release reopen exit: $baselineExit; reproduced 2753: $baseline2753"
+    $legacyEmpty=!(Test-Path (Join-Path $previousApp 'JunZhengMatch.exe'))
+    if (!$legacyEmpty) { throw 'Legacy registration case unexpectedly installed an EXE' }
+    $app=Join-Path $root 'Recovered program'
+    $data=$previousData
+    Invoke-Wizard $msiPath $app $data 'recover-empty-upgrade' -EditPaths
+    $installed=$true;$previousInstalled=$false;$exe=Assert-Program $app
+    $legacyRegistered=$false
+    try {$null=$installer.ProductInfo($legacyCode,'VersionString');$legacyRegistered=$true} catch {}
+    if ($legacyRegistered) { throw 'Upgrade left the old empty product registration behind' }
+    Assert-DataPath $data;Assert-Data $data $legacyHash
+    $cases+='upgrade_recovers_empty_v111_registration';$cases+='old_registration_removed'
+  } else {
+    $app=Join-Path $root 'Final program';$data=Join-Path $root 'Final data'
+    Invoke-Wizard $msiPath $app $data 'final-install' -EditPaths
+    $installed=$true;$exe=Assert-Program $app;$legacyHash=Mark-Data $data
   }
-  python tools/verify_installer_ui.py --msi $msiPath --app $app --data $data --log (Join-Path $root 'install.log')
-  if ($LASTEXITCODE -ne 0) { throw 'Visible MSI install failed' }
-  $installed=$true
-  if ($PreviousMsi) {
-    if (Test-Path (Join-Path $previousApp 'JunZhengMatch.exe')) { throw 'Upgrade left the previous program installed' }
-    if (!(Test-Path (Join-Path $previousData 'upgrade-marker.txt'))) { throw 'Upgrade removed previous user data' }
-    $previousInstalled=$false
-  }
-  $exe=Join-Path $app 'JunZhengMatch.exe'
-  if (!(Test-Path $exe)) { throw 'Installed EXE is missing' }
-  $config=Get-Content (Join-Path $env:USERPROFILE 'JunZhenMatch/preferences.json') | ConvertFrom-Json
-  if ([IO.Path]::GetFullPath($config.data_dir).TrimEnd('\') -ne [IO.Path]::GetFullPath($data).TrimEnd('\')) { throw "Installer data directory mismatch. Expected: $data; actual: $($config.data_dir)" }
-  $originalConfig=Get-Content (Join-Path $env:USERPROFILE 'JunZhenMatch/preferences.json') -Raw
-  foreach ($operation in @('reopen','repair')) {
-    if ($operation -eq 'reopen') {
-      python tools/verify_installer_ui.py --msi $msiPath --app $app --data $data --log (Join-Path $root 'reopen.log') --maintenance
-      if ($LASTEXITCODE -ne 0) { throw 'Visible MSI reopen failed' }
-    } else {
-      $arguments=@('/fa',('"'+$msiPath+'"'),'/qn','/norestart','/L*v',('"'+(Join-Path $root 'repair.log')+'"'))
-      $process=Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru
-      if ($process.ExitCode -notin @(0,3010)) { Get-Content (Join-Path $root 'repair.log') -Tail 100;throw "MSI repair failed: $($process.ExitCode)" }
-    }
-  }
-  if ((Get-Content (Join-Path $env:USERPROFILE 'JunZhenMatch/preferences.json') -Raw) -ne $originalConfig) { throw 'Reopen or repair changed user settings' }
-  $shortcutPath=[IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('Programs')) 'JunZhenMatch/䇹政导师匹配.lnk'))
-  if (!(Test-Path $shortcutPath)) { throw 'Start menu shortcut is missing' }
-  New-Item -ItemType Directory -Force installer-diagnostics | Out-Null
-  Copy-Item -LiteralPath $shortcutPath -Destination installer-diagnostics/
-  python tools/verify_shortcut.py --path $shortcutPath --expected-target $exe
-  if ($LASTEXITCODE -ne 0) { throw 'Installed shortcut verification failed' }
+  $shortcut=[IO.Path]::GetFullPath((Join-Path ([Environment]::GetFolderPath('Programs')) 'JunZhenMatch/䇹政导师匹配.lnk'))
+  python tools/verify_shortcut.py --path $shortcut --expected-target $exe
+  if ($LASTEXITCODE -ne 0) { throw 'Installed shortcut points to the wrong program' }
+  $settings=Get-Content $configPath -Raw
   python tools/verify_runtime.py --exe $exe --desktop --report installed-runtime-test.json
-  if ($LASTEXITCODE -ne 0) { throw 'Installed desktop/runtime verification failed' }
-  Write-Host 'Installed runtime passed; checking uninstall'
-  New-Item -ItemType Directory -Force $data | Out-Null
-  'preserve-user-data' | Set-Content (Join-Path $data 'user-data-marker.txt')
-  $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$msiPath+'"'),'REMOVE=Complete','/qn','/norestart','/L*v',('"'+(Join-Path $root 'component-maintenance.log')+'"')) -Wait -PassThru
-  if ($process.ExitCode -notin @(0,3010)) { throw 'Component maintenance repeated the old 2753 failure' }
-  if (Test-Path $exe) { throw 'Component maintenance did not remove its EXE' }
-  if (!(Test-Path (Join-Path $data 'user-data-marker.txt'))) { throw 'Component maintenance removed user data' }
-  $process=Start-Process msiexec.exe -ArgumentList @('/i',('"'+$msiPath+'"'),'ADDLOCAL=Complete','/qn','/norestart',('INSTALLFOLDER="'+$app+'"'),('JZDATADIR="'+$data+'"'),'/L*v',('"'+(Join-Path $root 'component-restore.log')+'"')) -Wait -PassThru
-  if ($process.ExitCode -notin @(0,3010) -or !(Test-Path $exe)) { throw 'Component restoration failed' }
-  $process=Start-Process msiexec.exe -ArgumentList @('/x',('"'+$msiPath+'"'),'/qn','/norestart','/L*v',('"'+(Join-Path $root 'uninstall.log')+'"')) -Wait -PassThru
-  if ($process.ExitCode -notin @(0,3010)) { Get-Content (Join-Path $root 'uninstall.log') -Tail 80;throw "MSI uninstall failed: $($process.ExitCode)" }
+  if ($LASTEXITCODE -ne 0) { throw 'Installed native/shared runtime failed' }
+  Assert-DataPath $data;Assert-Data $data $legacyHash
+  Invoke-Wizard $msiPath $app $data 'reopen-repair' -Maintenance
+  $exe=Assert-Program $app
+  Invoke-Quiet $msiPath '/fa' 'external-repair'
+  $exe=Assert-Program $app
+  if ((Get-Content $configPath -Raw) -ne $settings) { throw 'Reopen or external repair changed user settings' }
+  Assert-Data $data $legacyHash
+  $cases+='native_shortcut_and_shared_runtime';$cases+='gui_and_external_repair'
+  Invoke-Wizard $msiPath $app $data 'final-uninstall' -Maintenance -Remove
   $installed=$false
-  if (!(Test-Path (Join-Path $data 'user-data-marker.txt'))) { throw 'Uninstall removed user data' }
-  if (Test-Path $exe) { throw 'Uninstall did not remove program files' }
-  @{status='ok';publisher='xiaoyuyuan2006dx';visible_wizard=$true;upgrade_from_v110=[bool]$PreviousMsi;baseline_2753=$baseline2753;component_maintenance=$true;reopen=$true;repair=$true;storage_selection=$true;embedded_artwork=$true;native_shortcut=$true;installed_runtime=$true;uninstall_preserves_data=$true} | ConvertTo-Json | Set-Content -Encoding utf8 $Report
+  if (Test-Path $exe) { throw 'Final uninstall did not remove program files' }
+  Assert-Data $data $legacyHash
+  @{status='ok';publisher='xiaoyuyuan2006dx';version=$expectedVersion;no_cli_install_overrides=$true;legacy_empty_registration=$legacyEmpty;cases=$cases;uninstall_preserves_database=$true} | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $Report
 }
 finally {
   New-Item -ItemType Directory -Force installer-diagnostics | Out-Null

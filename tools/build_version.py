@@ -3,7 +3,7 @@ import argparse,os,re
 from pathlib import Path
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--version',default='');args=parser.parse_args()
-    tag=args.version or 'v1.1.1'
+    tag=args.version or 'v1.1.2'
     if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+',tag):raise ValueError('版本号须为v1.1.0格式。')
     version=tag[1:];parts=tuple(map(int,version.split('.')))+(0,)
     if any(n>65535 for n in parts):raise ValueError('版本段不能超过65535。')

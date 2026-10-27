@@ -7,11 +7,31 @@ import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
+from unittest import mock
+import os
+import subprocess
+import sys
 from junzheng_match import paths,preferences,runtime
 from junzheng_match.service_settings import ServiceSettings
 
 
 class PreferencesTests(unittest.TestCase):
+    def test_repair_preserves_existing_settings_and_data_choice(self):
+        store=self.app.PREFERENCES
+        store.write({'match_defaults':{'max_teacher_uses':1}})
+        original=store.file.read_bytes();database=self.app.DB_PATH.read_bytes()
+        unused=self.root/'stale-installer-location'
+        env={**os.environ,'JZ_CONFIG_DIR':str(store.root)};env.pop('JZ_DATA_DIR',None)
+        result=subprocess.run([sys.executable,str(paths.RESOURCE_ROOT/'packaging/launcher.py'),'--configure-data',str(unused),'--keep-existing-settings','--no-open'],env=env,capture_output=True,timeout=30)
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(store.file.read_bytes(),original)
+        self.assertEqual(self.app.DB_PATH.read_bytes(),database)
+        self.assertFalse(unused.exists())
+    def test_isolated_config_does_not_change_installer_registry(self):
+        registry=mock.MagicMock()
+        with mock.patch.dict(sys.modules,{'winreg':registry}),mock.patch.object(os,'name','nt'):
+            self.app.PREFERENCES.write({'match_defaults':{'max_teacher_uses':4}})
+        registry.CreateKey.assert_not_called()
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.root=Path(self.temp.name)
         folder=preferences.prepare_folder(self.root/'original');db=folder/'sjtu_faculty_data.db';shutil.copy2(paths.SEED_DB,db)

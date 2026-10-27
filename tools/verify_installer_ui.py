@@ -11,7 +11,7 @@ sys.stdout.reconfigure(encoding='utf-8',errors='backslashreplace')
 sys.stderr.reconfigure(encoding='utf-8',errors='backslashreplace')
 
 
-def install(msi,app,data,log,maintenance=False,no_properties=False):
+def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=False,remove=False):
     user=ctypes.windll.user32
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
@@ -19,6 +19,9 @@ def install(msi,app,data,log,maintenance=False,no_properties=False):
     user.EnumWindows.argtypes=[callback,w.LPARAM]
     user.EnumChildWindows.argtypes=[w.HWND,callback,w.LPARAM]
     user.PostMessageW.argtypes=[w.HWND,w.UINT,w.WPARAM,w.LPARAM]
+    user.SetWindowTextW.argtypes=[w.HWND,w.LPCWSTR]
+    user.GetClassNameW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
+    user.GetWindowRect.argtypes=[w.HWND,ctypes.POINTER(w.RECT)]
     def caption(hwnd):
         buffer=ctypes.create_unicode_buffer(4096);user.GetWindowTextW(hwnd,buffer,4096);return buffer.value
     def windows(parent=None):
@@ -37,12 +40,26 @@ def install(msi,app,data,log,maintenance=False,no_properties=False):
     properties='' if no_properties else f' INSTALLFOLDER="{values[1]}" JZDATADIR="{values[2]}"'
     process=subprocess.Popen(f'msiexec.exe /i "{values[0]}" /norestart{properties} /L*v "{values[3]}"')
     deadline=time.monotonic()+180;clicked=set();seen=set();errors=[]
+    paths_edited=False
     try:
         while process.poll() is None and time.monotonic()<deadline:
             for hwnd,title in windows():
                 button=None
-                if title=='JunZhenMatch 安装':button='安装';seen.add('setup')
-                elif title=='安装完成':button='完成';seen.add('complete')
+                if title=='JunZhenMatch 安装':
+                    button='安装';seen.add('setup')
+                    if edit_paths and not paths_edited:
+                        edits=[]
+                        for child,_ in windows(hwnd):
+                            name=ctypes.create_unicode_buffer(128);user.GetClassNameW(child,name,128)
+                            if name.value.lower()=='edit':
+                                rect=w.RECT();user.GetWindowRect(child,ctypes.byref(rect));edits.append((rect.top,child))
+                        if len(edits)!=2:raise RuntimeError('Expected program and data path edit fields: '+repr(edits))
+                        for (_,child),value in zip(sorted(edits),[str(app),str(data)]):user.SetWindowTextW(child,value)
+                        user.PostMessageW(hwnd,0x0028,0,0)
+                        paths_edited=True
+                        time.sleep(.3)
+                elif title=='JunZhenMatch 维护':button='卸载程序' if remove else '修复安装';seen.add('maintenance')
+                elif title in ('安装完成','操作完成'):button='完成';seen.add('complete')
                 elif title in ('安装失败','安装已取消'):button='关闭';errors.append(title)
                 elif title=='JunZhenMatch':
                     texts=' '.join(text for _,text in windows(hwnd))
@@ -54,12 +71,12 @@ def install(msi,app,data,log,maintenance=False,no_properties=False):
             time.sleep(.2)
         if process.poll() is None:raise RuntimeError('Visible installer timed out; wizard stages: '+repr(seen)+'; windows: '+repr([title for _,title in windows() if title]))
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
-        expected={'complete'} if maintenance else {'setup','complete'}
+        expected={'maintenance','complete'} if maintenance else {'setup','complete'}
         if seen!=expected:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
     finally:
         if process.poll() is None:process.kill()
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');parser.add_argument('--no-properties',action='store_true');args=parser.parse_args()
-    install(args.msi,args.app,args.data,args.log,args.maintenance,args.no_properties)
+    parser=argparse.ArgumentParser();parser.add_argument('--msi',required=True);parser.add_argument('--app',required=True);parser.add_argument('--data',required=True);parser.add_argument('--log',required=True);parser.add_argument('--maintenance',action='store_true');parser.add_argument('--no-properties',action='store_true');parser.add_argument('--edit-paths',action='store_true');parser.add_argument('--remove',action='store_true');args=parser.parse_args()
+    install(args.msi,args.app,args.data,args.log,args.maintenance,args.no_properties,args.edit_paths,args.remove)

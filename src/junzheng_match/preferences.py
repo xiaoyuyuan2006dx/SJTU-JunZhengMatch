@@ -48,10 +48,13 @@ class PreferenceStore:
             temp=self.file.with_name('.preferences-'+secrets.token_hex(4)+'.tmp')
             temp.write_text(json.dumps(current,ensure_ascii=False,indent=2),encoding='utf-8');temp.chmod(0o600)
             os.replace(temp,self.file)
-            if os.name=='nt':
-                import winreg
-                with winreg.CreateKey(winreg.HKEY_CURRENT_USER,r'Software\TaroDeluxe\JunZhenMatch') as key:winreg.SetValueEx(key,'DataDir',0,winreg.REG_SZ,current['data_dir'])
+            self.remember_install_location(current)
             return current
+    def remember_install_location(self,current=None):
+        if os.name=='nt' and self.root.resolve()==paths.DEFAULT_HOME.resolve():
+            import winreg
+            current=current or self.read()
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER,r'Software\TaroDeluxe\JunZhenMatch') as key:winreg.SetValueEx(key,'DataDir',0,winreg.REG_SZ,current['data_dir'])
     def data_dir(self):
         return Path(os.getenv('JZ_DATA_DIR') or self.read()['data_dir']).expanduser().resolve()
 
