@@ -26,7 +26,11 @@ def install(msi,app,data,log):
         if parent:user.EnumChildWindows(parent,collect,0)
         else:user.EnumWindows(collect,0)
         return found
-    process=subprocess.Popen(['msiexec.exe','/i',str(Path(msi).resolve()),'/norestart',f'INSTALLFOLDER={app}',f'JZDATADIR={data}','/L*v',str(log)])
+    values=[str(Path(msi).resolve()),str(app),str(data),str(log)]
+    if any('"' in value for value in values):raise ValueError('MSI test paths cannot contain quotes')
+    # msiexec parses PROPERTY="value with spaces" itself. list2cmdline would
+    # quote the entire PROPERTY=value token and can open its command help UI.
+    process=subprocess.Popen(f'msiexec.exe /i "{values[0]}" /norestart INSTALLFOLDER="{values[1]}" JZDATADIR="{values[2]}" /L*v "{values[3]}"')
     deadline=time.monotonic()+180;clicked=set();seen=set();errors=[]
     try:
         while process.poll() is None and time.monotonic()<deadline:
@@ -43,7 +47,7 @@ def install(msi,app,data,log):
                         if text.replace('&','')==button:
                             user.PostMessageW(child,0x00F5,0,0);clicked.add((hwnd,button));print('MSI UI: '+title+' / '+button,flush=True);break
             time.sleep(.2)
-        if process.poll() is None:raise RuntimeError('Visible installer timed out; wizard stages: '+repr(seen))
+        if process.poll() is None:raise RuntimeError('Visible installer timed out; wizard stages: '+repr(seen)+'; windows: '+repr([title for _,title in windows() if title]))
         if process.returncode not in (0,3010) or errors:raise RuntimeError(f'MSI UI failed: {process.returncode}; {errors}')
         if seen!={'setup','complete'}:raise RuntimeError('MSI UI did not complete expected wizard stages: '+repr(seen))
     finally:

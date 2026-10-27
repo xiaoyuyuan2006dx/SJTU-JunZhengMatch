@@ -21,3 +21,5 @@ v1.1.1 修复重复打开或修复 MSI 时的2753错误；已经安装v1.1.0可�
 端口冲突会自动使用可用端口。需指定端口可在快捷方式目标后添加 `--port 8080`。独立窗口版快捷方式带 `--desktop`；便携 EXE 默认打开浏览器。
 
 程序未作商业代码签名。可用 PowerShell `Get-FileHash 文件名 -Algorithm SHA256` 与 Release 中 SHA256SUMS.txt 核对。发布步骤见 [RELEASING.md](RELEASING.md)。
+
+浏览器的“不常下载／请确认信任此文件”属于下载信誉提示，不等同于病毒检测结论。更改发布者字段不能替代可信代码签名；即使正规签名的新程序也可能需要积累信誉。当前版本未签名，因此不能保证消除此提示。原理见 [微软说明](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation)；若提示明确检测到病毒或恶意软件，应进一步排查，不能与“不常下载”混为一谈。
