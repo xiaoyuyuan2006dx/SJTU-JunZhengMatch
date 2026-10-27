@@ -11,7 +11,9 @@
 在 [Releases](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/releases/latest) 选择：
 
 - **portable.zip**：解压后双击 `JunZhengMatch.exe`，在浏览器操作，无需安装 Python。
-- **setup.msi**：安装时选择程序和数据位置，使用桌面或开始菜单快捷方式打开独立窗口。缺少 WebView2 时安装程序会联网补装。
+- **setup.msi**：安装时选择程序和数据位置，使用桌面或开始菜单快捷方式打开独立窗口。MSI 不联网下载组件；缺少 WebView2 时，首次启动显示下载与安装窗口。
+
+MSI 显示实际安装进度和当前步骤，通常约10–30秒，较慢磁盘约1分钟。首次启动若需下载 WebView2，会显示已等待时间、活动进度条及微软下载窗口，通常约1–3分钟，最多等待5分钟后报错；耗时取决于网络，不显示虚假的精确百分比。失败后可检查网络，再运行安装目录中的 `MicrosoftEdgeWebview2Setup.exe`，或直接双击 `JunZhengMatch.exe` 使用浏览器版。发布者信息为 `xiaoyuyuan2006dx`。
 
 默认数据位于 `%USERPROFILE%\JunZhenMatch`（C盘用户目录下），不存在时自动创建。浏览器版首次启动会提示位置，两版均可在“偏好设置”中修改存储位置及导入导出数据。教师库、导出、日志保存在此处；不保留上传原表。升级或卸载保留数据。
 
@@ -28,7 +30,7 @@ Windows 独立窗口另安装 `packaging/requirements-desktop.txt`，运行 `pyt
 
 ```bash
 python -m pip install -r packaging/requirements-dev.txt
-python tools/build_version.py --version v1.1.0
+python tools/build_version.py --version v1.1.1
 pyinstaller --clean --noconfirm packaging/JunZhengMatch.spec
 ```
 

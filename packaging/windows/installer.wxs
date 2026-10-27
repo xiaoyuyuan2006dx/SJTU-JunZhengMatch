@@ -1,5 +1,5 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
-  <Package Name="JunZhenMatch" Manufacturer="TaroDeluxe" Version="$(var.Version)" UpgradeCode="4BBF6F5A-0C4D-4F1C-9F3C-6CA82C89C31F" Language="2052" Scope="perUser" Codepage="65001">
+  <Package Name="JunZhenMatch" Manufacturer="xiaoyuyuan2006dx" Version="$(var.Version)" UpgradeCode="4BBF6F5A-0C4D-4F1C-9F3C-6CA82C89C31F" Language="2052" Scope="perUser" Codepage="65001">
     <MajorUpgrade DowngradeErrorMessage="已安装更新版本，请先卸载再安装旧版。" />
     <MediaTemplate EmbedCab="yes" />
     <Icon Id="AppIcon" SourceFile="$(var.IconPath)" />
@@ -50,9 +50,9 @@
       <ComponentRef Id="MenuShortcut" />
       <ComponentRef Id="DesktopShortcut" />
     </Feature>
-    <CustomAction Id="ConfigureStorage" FileRef="MainExe" ExeCommand="--configure-data &quot;[JZDATADIR]\.&quot; --ensure-webview2 --no-open" Execute="deferred" Impersonate="yes" Return="check" />
+    <CustomAction Id="ConfigureStorage" FileRef="MainExe" ExeCommand="--configure-data &quot;[JZDATADIR]\.&quot; --no-open" Execute="deferred" Impersonate="yes" Return="check" />
     <InstallExecuteSequence>
-      <Custom Action="ConfigureStorage" Before="InstallFinalize" Condition="NOT REMOVE~=&quot;ALL&quot;" />
+      <Custom Action="ConfigureStorage" Before="InstallFinalize" Condition="NOT REMOVE~=&quot;ALL&quot; AND $AppFiles=3" />
     </InstallExecuteSequence>
     <UI>
       <TextStyle Id="DefaultFont" FaceName="Microsoft YaHei UI" Size="9" />
@@ -66,7 +66,7 @@
         <Control Id="ProgramPath" Type="PathEdit" X="20" Y="118" Width="380" Height="20" Property="INSTALLFOLDER" />
         <Control Id="DataLabel" Type="Text" X="20" Y="153" Width="380" Height="17" Text="数据存储位置（不存在时自动创建）：" />
         <Control Id="DataPath" Type="Edit" X="20" Y="173" Width="380" Height="20" Property="JZDATADIR" />
-        <Control Id="Hint" Type="Text" X="20" Y="203" Width="380" Height="27" Text="可输入其他文件夹的完整路径。安装后也可在“偏好设置”中迁移数据。缺少WebView2环境时将联网安装。" />
+        <Control Id="Hint" Type="Text" X="20" Y="203" Width="380" Height="27" Text="可输入其他文件夹的完整路径，之后可在偏好设置中迁移。缺少WebView2时，首次启动会打开微软安装窗口；此安装步骤不下载环境。" />
         <Control Id="Install" Type="PushButton" X="245" Y="300" Width="75" Height="22" Default="yes" Text="安装">
           <Publish Event="SetTargetPath" Value="INSTALLFOLDER" Condition="1" />
           <Publish Event="EndDialog" Value="Return" Condition="JZDATADIR" />
@@ -78,8 +78,13 @@
       <Dialog Id="ProgressDlg" Width="640" Height="342" Title="正在安装" Modeless="yes" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />
         <Control Id="Title" Type="Text" TabSkip="no" X="20" Y="42" Width="380" Height="25" Text="正在安装 JunZhenMatch…" />
-        <Control Id="ActionText" Type="Text" X="20" Y="108" Width="380" Height="20" Text="[ActionText]" />
-        <Control Id="Progress" Type="ProgressBar" X="20" Y="145" Width="380" Height="15" ProgressBlocks="yes" />
+        <Control Id="ActionText" Type="Text" X="20" Y="108" Width="380" Height="20" Text="正在准备安装…">
+          <Subscribe Event="ActionText" Attribute="Text" />
+        </Control>
+        <Control Id="Progress" Type="ProgressBar" X="20" Y="145" Width="380" Height="15" ProgressBlocks="yes">
+          <Subscribe Event="SetProgress" Attribute="Progress" />
+        </Control>
+        <Control Id="TimeHint" Type="Text" X="20" Y="178" Width="380" Height="55" Text="通常约10–30秒，较慢磁盘约1分钟。此步骤不联网下载组件。缺少WebView2时，首次启动另行显示下载进度及时间说明。" />
       </Dialog>
       <Dialog Id="ExitDialog" Width="640" Height="342" Title="安装完成" NoMinimize="yes">
         <Control Id="Artwork" Type="Bitmap" X="448" Y="0" Width="192" Height="342" TabSkip="yes" Text="InstallerArtwork" />

@@ -65,6 +65,7 @@ jobs:
           if ($process.ExitCode -ne 0) { throw 'EXE self-test failed' }
           if ((Get-Content exe-self-test.json | ConvertFrom-Json).status -ne 'ok') { throw 'Invalid EXE report' }
       - run: python tools/verify_app.py --exe dist/JunZhengMatch.exe --report exe-http-test.json
+      - run: python tools/verify_setup_progress.py
       - name: Download Microsoft WebView2 bootstrapper
         shell: pwsh
         run: |
@@ -82,7 +83,13 @@ jobs:
           wix msi validate "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -sice ICE20
       - name: Install, verify and uninstall MSI
         shell: pwsh
-        run: ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -Report installer-test.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.1.0 --repo "${{ github.repository }}" --pattern '*setup.msi' --dir previous
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot download upgrade baseline' }
+          $previous=(Get-ChildItem previous/*.msi | Select-Object -First 1).FullName
+          ./tools/verify_installer.ps1 -Msi "dist/JunZhengMatch-$env:APP_VERSION-windows-x64-setup.msi" -PreviousMsi $previous -Report installer-test.json
       - run: python tools/verify_runtime.py --exe dist/JunZhengMatch.exe --desktop --report exe-runtime-test.json
       - uses: actions/download-artifact@v4
         with:

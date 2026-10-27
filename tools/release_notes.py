@@ -7,29 +7,21 @@ parser.add_argument('--version',required=True)
 parser.add_argument('--output',required=True)
 args=parser.parse_args()
 version=args.version.removeprefix('v')
-text=f'''## 新增
+text=f'''## 修复
 
-- Windows 独立窗口安装版（MSI），安装时可设置数据目录。
-- 偏好设置：存储位置、教师数据导入导出和默认匹配参数。
-- 教师使用次数上限，默认每次任务最多2次；候选不足留空并说明。
+- 修复重复打开或修复 MSI 时的2753错误，初始化仅在程序组件计划安装时运行。
+- WebView2 下载移出 MSI 安装事务，避免安装进度长时间无说明地停住。
 
 ## 调整
 
-- 浏览器版与安装版使用相同数据目录时共用后台。
-- 默认数据目录为 `%USERPROFILE%\\JunZhenMatch`，与程序分开，升级和卸载保留数据。
-- 关闭标签页或窗口只关闭当前界面；右上角“退出程序”停止共享后台。
-- 整理源码目录和文档，统一发行文件命名与校验。
-
-## 修复
-
-- 匹配预览随容器变化重新计算列宽，避免末列被裁切。
-- 教师库列宽适配可用空间，保留人工维护操作。
-- 独立窗口桥接只公开操作方法，避免递归遍历原生对象导致启动卡住。
-- 自定义程序安装位置会被记住，卸载正确移除程序并保留外部数据。
+- MSI 与 EXE 的发布者信息改为 xiaoyuyuan2006dx。
+- MSI 显示实际安装进度和当前步骤，参考耗时约10–30秒。
+- 首次启动缺少 WebView2 时，显示下载说明、已等待时间和微软安装进度；通常约1–3分钟，最多等待5分钟，实际取决于网络。
+- 保留全部教师库、匹配参数、原格式导出及 v1.1.0 功能。
 
 ## 验证
 
-通过回归、实际HTTP与多进程检查、Windows EXE及独立窗口检查、MSI安装和卸载数据保留检查、Docker构建及启动检查。详细报告位于便携ZIP的 verification 目录。
+54项回归测试，以及 Windows 可见安装向导、重复打开、强制修复、从v1.1.0升级、原生下载进度窗口、独立窗口、共享后台、卸载数据保留和 Docker 检查。报告位于便携ZIP的 verification 目录。
 
 ## 下载使用
 
@@ -40,7 +32,9 @@ text=f'''## 新增
 | JunZhengMatch-{version}-docker-amd64.tar.gz | Docker镜像归档 |
 | SHA256SUMS.txt | 下载文件校验 |
 
-自带737条网络公开SJTU教师记录，无需Python。示例学生信息均为虚构。安装版缺少WebView2时会联网补装。Windows程序未作商业代码签名。
+已安装v1.1.0可直接升级；安装前通过退出贴纸停止后台，用户数据保留。MSI安装不联网下载组件；仅首次启动缺少WebView2时联网补装。网络不通可直接双击安装目录里的JunZhengMatch.exe使用浏览器版。
+
+自带737条网络公开SJTU教师记录，示例学生均为虚构。发布者字段不是数字签名；Windows程序仍未签名。
 
 [使用说明](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/blob/{args.version}/README.md) · [Windows说明](https://github.com/xiaoyuyuan2006dx/SJTU-JunZhengMatch/blob/{args.version}/WINDOWS.md)
 '''

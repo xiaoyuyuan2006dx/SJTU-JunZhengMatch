@@ -72,6 +72,9 @@ def main():
     if args.serve or args.no_open or args.host not in ('127.0.0.1','localhost','::1'):
         from .web_server import run_server
         return run_server(args.host,args.port)
+    if args.desktop or args.desktop_smoke:
+        from .native import ensure_webview2
+        ensure_webview2(interactive=not args.desktop_smoke)
     folder=preferences.prepare_folder(store.data_dir());instance=runtime.ensure_backend(folder,args.port,store.root)
     if args.launch_only:
         if args.report:Path(args.report).write_text(json.dumps(instance),encoding='utf-8')

@@ -31,7 +31,7 @@ def pick_directory():
     finally:ctypes.windll.ole32.OleUninitialize()
 
 
-def ensure_webview2():
+def ensure_webview2(interactive=False):
     if os.name!='nt':return
     import winreg
     key=r'Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
@@ -44,7 +44,13 @@ def ensure_webview2():
             except OSError:pass
     installer=Path(sys.executable).parent/'MicrosoftEdgeWebview2Setup.exe'
     if not installer.exists():raise RuntimeError('未找到WebView2环境，请运行安装包完成依赖安装。')
-    subprocess.run([str(installer),'/silent','/install'],check=True,timeout=300)
+    try:
+        if interactive:
+            from .windows_setup import run_setup
+            run_setup([str(installer),'/install'])
+        else:subprocess.run([str(installer),'/silent','/install'],check=True,timeout=300)
+    except (subprocess.SubprocessError,OSError) as error:
+        raise RuntimeError('WebView2安装未完成，请检查网络后重新打开程序。也可从程序安装目录运行MicrosoftEdgeWebview2Setup.exe，或用JunZhengMatch.exe在浏览器操作。') from error
 
 
 class DesktopBridge:
