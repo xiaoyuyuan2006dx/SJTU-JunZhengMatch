@@ -53,7 +53,7 @@ static LRESULT CALLBACK activity_proc(HWND window,UINT message,WPARAM wp,LPARAM 
         HBRUSH background=CreateSolidBrush(RGB(255,252,247));FillRect(dc,&area,background);DeleteObject(background);
         double t=(GetTickCount64()-state->started)/1000.0;
         COLORREF colors[]={RGB(239,173,188),RGB(177,157,207),RGB(131,196,179),RGB(246,198,111)};
-        int radius=max(3,area.bottom/9),gap=radius*4;
+        int radius=max(4,area.bottom/7),gap=radius*4;
         for(int i=0;i<4;i++) {
             int x=radius+4+i*gap,y=area.bottom/2-(int)(sin(t*5-i*.85)*radius*1.5);
             HBRUSH brush=CreateSolidBrush(colors[i]);HGDIOBJ old_brush=SelectObject(dc,brush),old_pen=SelectObject(dc,GetStockObject(NULL_PEN));
@@ -96,9 +96,13 @@ static DWORD WINAPI activity_thread(void *unused) {
 static BOOL CALLBACK lower_background(HWND child,LPARAM parent_rect) {
     RECT child_rect;RECT *area=(RECT*)parent_rect;GetWindowRect(child,&child_rect);
     if(child_rect.right-child_rect.left>=(area->right-area->left)*9/10 &&
-       child_rect.bottom-child_rect.top>=(area->bottom-area->top)*9/10 &&
-       GetWindow(child,GW_HWNDNEXT)!=NULL) {
-        SetWindowPos(child,HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+       child_rect.bottom-child_rect.top>=(area->bottom-area->top)*9/10) {
+        LONG_PTR style=GetWindowLongPtrW(child,GWL_STYLE);
+        if(GetWindow(child,GW_HWNDNEXT)!=NULL || !(style&WS_CLIPSIBLINGS)) {
+            SetWindowLongPtrW(child,GWL_STYLE,style|WS_CLIPSIBLINGS);
+            SetWindowPos(child,HWND_BOTTOM,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE|SWP_ASYNCWINDOWPOS);
+            RedrawWindow(GetParent(child),NULL,NULL,RDW_INVALIDATE|RDW_ALLCHILDREN);
+        }
     }
     return TRUE;
 }

@@ -19,6 +19,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     callback=ctypes.WINFUNCTYPE(w.BOOL,w.HWND,w.LPARAM)
     user.GetWindowTextW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
     user.IsWindowVisible.argtypes=[w.HWND]
+    user.IsWindowEnabled.argtypes=[w.HWND]
     user.EnumWindows.argtypes=[callback,w.LPARAM]
     user.EnumChildWindows.argtypes=[w.HWND,callback,w.LPARAM]
     user.PostMessageW.argtypes=[w.HWND,w.UINT,w.WPARAM,w.LPARAM]
@@ -26,6 +27,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     user.GetClassNameW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
     user.GetWindowRect.argtypes=[w.HWND,ctypes.POINTER(w.RECT)]
     user.GetWindowThreadProcessId.argtypes=[w.HWND,ctypes.POINTER(w.DWORD)]
+    user.GetWindowLongPtrW.argtypes=[w.HWND,ctypes.c_int];user.GetWindowLongPtrW.restype=ctypes.c_ssize_t
     class MouseInput(ctypes.Structure):
         _fields_=[('dx',w.LONG),('dy',w.LONG),('mouseData',w.DWORD),('dwFlags',w.DWORD),('time',w.DWORD),('dwExtraInfo',ctypes.c_size_t)]
     class KeyInput(ctypes.Structure):
@@ -99,6 +101,12 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
         time.sleep(.25)  # Capture after the native dialog has completed painting.
         rect=w.RECT();user.GetWindowRect(hwnd,ctypes.byref(rect))
         ImageGrab.grab(bbox=(rect.left,rect.top,rect.right,rect.bottom)).save(path)
+        controls=[]
+        for child,text in windows(hwnd,include_hidden=True):
+            klass=ctypes.create_unicode_buffer(128);user.GetClassNameW(child,klass,128)
+            bounds=w.RECT();user.GetWindowRect(child,ctypes.byref(bounds))
+            controls.append(dict(title=text,kind=klass.value,style=hex(user.GetWindowLongPtrW(child,-16)),rect=[bounds.left,bounds.top,bounds.right,bounds.bottom]))
+        path.with_suffix('.json').write_text(json.dumps(controls,ensure_ascii=False),encoding='utf-8')
     try:
         while (process.poll() is None or (open_existing and not existing_finished)) and time.monotonic()<deadline:
             for hwnd,title in windows():
@@ -150,6 +158,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                     if open_existing:
                         pid=w.DWORD();user.GetWindowThreadProcessId(hwnd,ctypes.byref(pid));existing_pid=pid.value
                         if not any('v99.0.0' in text for _,text in windows(hwnd)):raise RuntimeError('Maintenance opened the wrong installed version')
+                        if process.poll() is None:continue
                         seen.add('existing-maintenance');button='取消'
                     else:button='卸载程序' if remove else '修复安装';seen.add('maintenance')
                 elif title in ('安装完成','操作完成'):capture(hwnd,'complete');button='完成';seen.add('complete')
@@ -161,7 +170,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                 elif title=='JunZhenMatch':
                     texts=' '.join(text for _,text in windows(hwnd))
                     if '2753' in texts:errors.append(texts);button='确定'
-                if button and (hwnd,button) not in clicked:
+                if button and user.IsWindowEnabled(hwnd) and (hwnd,button) not in clicked:
                     for child,text in windows(hwnd):
                         if text.replace('&','')==button:
                             rect=w.RECT();user.GetWindowRect(child,ctypes.byref(rect))
@@ -169,6 +178,9 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                             user.SetCursorPos((rect.left+rect.right)//2,(rect.top+rect.bottom)//2)
                             user.mouse_event(0x0002,0,0,0,0);user.mouse_event(0x0004,0,0,0,0)
                             clicked.add((hwnd,button));print('MSI UI: '+title+' / '+button,flush=True);break
+                    # Refresh the window list after an action changes modal
+                    # ownership instead of clicking a stale parent immediately.
+                    break
             if open_existing and existing_cancelled and process.poll() is not None:
                 matching=False
                 for hwnd,_ in windows():
