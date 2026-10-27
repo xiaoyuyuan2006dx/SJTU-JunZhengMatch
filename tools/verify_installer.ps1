@@ -118,8 +118,18 @@ try {
   # A repair must install absent components, not request Reinstall of them.
   $emptyApp=$defaultApp
   $emptyData=$defaultData
-  Invoke-Wizard $msiPath $emptyApp $emptyData 'same-version-base'
-  Invoke-Quiet $msiPath '/i' 'same-version-advertised' @('ADVERTISE=Complete')
+  # The shipping package disallows advertising during normal installation.
+  # A CI-only fixture relaxes that UI attribute to reproduce the abnormal
+  # feature state in the user's log. All repair events/sequences stay intact.
+  $fixture=Join-Path $root 'advertised-state-fixture.msi'
+  Copy-Item -LiteralPath $msiPath -Destination $fixture
+  $fixtureDb=$installer.OpenDatabase($fixture,1)
+  $fixtureView=$fixtureDb.OpenView('UPDATE `Feature` SET `Attributes`=0 WHERE `Feature`=''Complete''')
+  $null=$fixtureView.Execute();$null=$fixtureView.Close();$null=$fixtureDb.Commit()
+  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($fixtureView)
+  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($fixtureDb)
+  Invoke-Wizard $fixture $emptyApp $emptyData 'same-version-base'
+  Invoke-Quiet $fixture '/i' 'same-version-advertised' @('ADVERTISE=Complete')
   $installed=$true
   if (Test-Path (Join-Path $emptyApp 'JunZhengMatch.exe')) { throw 'Same version empty registration unexpectedly copied the EXE' }
   $emptyHash=Mark-Data $emptyData
@@ -197,7 +207,7 @@ try {
   $installed=$false
   if (Test-Path $exe) { throw 'Final uninstall did not remove program files' }
   Assert-Data $data $legacyHash
-  @{status='ok';publisher='xiaoyuyuan2006dx';version=$expectedVersion;no_cli_install_overrides=$true;legacy_empty_registration=$legacyEmpty;cases=$cases;uninstall_preserves_database=$true} | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $Report
+  @{status='ok';publisher='xiaoyuyuan2006dx';version=$expectedVersion;no_cli_install_overrides=$true;legacy_empty_registration=$legacyEmpty;advertised_state_fixture='Feature.Attributes=0; production repair events and sequences unchanged';cases=$cases;uninstall_preserves_database=$true} | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 $Report
 }
 finally {
   New-Item -ItemType Directory -Force installer-diagnostics | Out-Null
