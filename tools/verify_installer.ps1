@@ -118,7 +118,8 @@ try {
   # A repair must install absent components, not request Reinstall of them.
   $emptyApp=$defaultApp
   $emptyData=$defaultData
-  Invoke-Quiet $msiPath '/ju' 'same-version-advertised'
+  Invoke-Wizard $msiPath $emptyApp $emptyData 'same-version-base'
+  Invoke-Quiet $msiPath '/i' 'same-version-advertised' @('ADVERTISE=Complete')
   $installed=$true
   if (Test-Path (Join-Path $emptyApp 'JunZhengMatch.exe')) { throw 'Same version empty registration unexpectedly copied the EXE' }
   $emptyHash=Mark-Data $emptyData
