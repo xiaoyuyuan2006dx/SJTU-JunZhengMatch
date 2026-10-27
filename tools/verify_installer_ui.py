@@ -20,7 +20,7 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
     user.EnumWindows.argtypes=[callback,w.LPARAM]
     user.EnumChildWindows.argtypes=[w.HWND,callback,w.LPARAM]
     user.PostMessageW.argtypes=[w.HWND,w.UINT,w.WPARAM,w.LPARAM]
-    user.SetWindowTextW.argtypes=[w.HWND,w.LPCWSTR]
+    user.SendMessageW.argtypes=[w.HWND,w.UINT,w.WPARAM,w.LPARAM]
     user.GetClassNameW.argtypes=[w.HWND,w.LPWSTR,ctypes.c_int]
     user.GetWindowRect.argtypes=[w.HWND,ctypes.POINTER(w.RECT)]
     def caption(hwnd):
@@ -65,7 +65,14 @@ def install(msi,app,data,log,maintenance=False,no_properties=False,edit_paths=Fa
                             if edit_wait_started is None:edit_wait_started=time.monotonic()
                             if time.monotonic()-edit_wait_started>10:raise RuntimeError('Path fields did not become ready: '+repr(controls))
                             continue
-                        for (_,child),value in zip(sorted(edits),[str(app),str(data)]):user.SetWindowTextW(child,value)
+                        # A Rich Edit WM_SETTEXT can suppress EN_CHANGE. Replace
+                        # the selected text like a user paste so MSI updates its
+                        # bound properties, not just the visible control text.
+                        for (_,child),value in zip(sorted(edits),[str(app),str(data)]):
+                            text_buffer=ctypes.create_unicode_buffer(value)
+                            user.SendMessageW(child,0x00B1,0,-1)
+                            user.SendMessageW(child,0x00C2,1,ctypes.cast(text_buffer,ctypes.c_void_p).value)
+                            if caption(child).rstrip('\\/').casefold()!=value.rstrip('\\/').casefold():raise RuntimeError('Path edit did not accept user input: '+caption(child))
                         user.PostMessageW(hwnd,0x0028,0,0)
                         paths_edited=True
                         time.sleep(.3)
