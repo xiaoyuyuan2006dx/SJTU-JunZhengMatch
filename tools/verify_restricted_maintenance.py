@@ -19,6 +19,31 @@ import tempfile
 
 
 def logon_run(arguments, name, password, elevated=False):
+    if elevated:
+        # A highest-privilege task gives CI this same account's full token.
+        # It does not bypass production UAC; the shipping host uses runas.
+        script=r"""
+$ErrorActionPreference='Stop'
+$task='JzMaintenance-'+$env:JZ_TEST_ACCOUNT
+$action=New-ScheduledTaskAction -Execute $env:JZ_TEST_PYTHON -Argument $env:JZ_TEST_ARGS
+try {
+    Register-ScheduledTask -TaskName $task -Action $action -User "$env:COMPUTERNAME\$env:JZ_TEST_ACCOUNT" -Password $env:JZ_TEST_PASSWORD -RunLevel Highest -Force | Out-Null
+    Start-ScheduledTask -TaskName $task
+    $deadline=(Get-Date).AddSeconds(180)
+    do {
+        Start-Sleep -Milliseconds 200
+        $info=Get-ScheduledTaskInfo -TaskName $task
+        $state=(Get-ScheduledTask -TaskName $task).State
+        if ((Get-Date) -gt $deadline) { throw 'Same-user elevated maintenance timed out' }
+    } while ($info.LastRunTime.Year -lt 2020 -or $state -eq 'Running' -or $state -eq 'Queued')
+    exit ([int]$info.LastTaskResult)
+} finally {
+    Unregister-ScheduledTask -TaskName $task -Confirm:$false -ErrorAction SilentlyContinue
+}
+"""
+        env={**os.environ,'JZ_TEST_ACCOUNT':name,'JZ_TEST_PASSWORD':password,
+             'JZ_TEST_PYTHON':arguments[0],'JZ_TEST_ARGS':subprocess.list2cmdline(arguments[1:])}
+        return subprocess.run(['powershell','-NoProfile','-Command',script],env=env,timeout=200).returncode
     adv=c.WinDLL('advapi32',use_last_error=True);kernel=c.WinDLL('kernel32',use_last_error=True)
     class STARTUP(c.Structure):
         _fields_=[('cb',w.DWORD),('reserved',w.LPWSTR),('desktop',w.LPWSTR),('title',w.LPWSTR),
@@ -31,27 +56,7 @@ def logon_run(arguments, name, password, elevated=False):
     adv.CreateProcessWithLogonW.argtypes=[w.LPCWSTR,w.LPCWSTR,w.LPCWSTR,w.DWORD,w.LPCWSTR,w.LPWSTR,w.DWORD,c.c_void_p,w.LPCWSTR,c.POINTER(STARTUP),c.POINTER(PROCESS)]
     startup=STARTUP();startup.cb=c.sizeof(startup);process=PROCESS()
     command=c.create_unicode_buffer(subprocess.list2cmdline(arguments))
-    if elevated:
-        # CI cannot click UAC on the secure desktop. Launch with this same
-        # disposable user's linked full token; production uses ShellExecute runas.
-        adv.LogonUserW.argtypes=[w.LPCWSTR,w.LPCWSTR,w.LPCWSTR,w.DWORD,w.DWORD,c.POINTER(w.HANDLE)]
-        adv.GetTokenInformation.argtypes=[w.HANDLE,w.DWORD,c.c_void_p,w.DWORD,c.POINTER(w.DWORD)]
-        adv.CreateProcessWithTokenW.argtypes=[w.HANDLE,w.DWORD,w.LPCWSTR,w.LPWSTR,w.DWORD,c.c_void_p,w.LPCWSTR,c.POINTER(STARTUP),c.POINTER(PROCESS)]
-        adv.DuplicateTokenEx.argtypes=[w.HANDLE,w.DWORD,c.c_void_p,w.DWORD,w.DWORD,c.POINTER(w.HANDLE)]
-        token=w.HANDLE();linked=w.HANDLE();primary=w.HANDLE();size=w.DWORD();full=w.DWORD()
-        if not adv.LogonUserW(name,'.',password,2,0,c.byref(token)):raise c.WinError(c.get_last_error())
-        try:
-            assert adv.GetTokenInformation(token,20,c.byref(full),c.sizeof(full),c.byref(size))
-            if not full.value:
-                if not adv.GetTokenInformation(token,19,c.byref(linked),c.sizeof(linked),c.byref(size)):raise c.WinError(c.get_last_error())
-            active=linked if linked.value else token
-            if not adv.DuplicateTokenEx(active,0x02000000,None,2,1,c.byref(primary)):raise c.WinError(c.get_last_error())
-            if not adv.CreateProcessWithTokenW(primary,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
-        finally:
-            if primary.value:kernel.CloseHandle(primary)
-            if linked.value:kernel.CloseHandle(linked)
-            kernel.CloseHandle(token)
-    elif not adv.CreateProcessWithLogonW(name,'.',password,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
+    if not adv.CreateProcessWithLogonW(name,'.',password,1,None,command,0x08000000,None,None,c.byref(startup),c.byref(process)):raise c.WinError(c.get_last_error())
     kernel.CloseHandle(process.thread)
     try:
         if kernel.WaitForSingleObject(process.process,180000)!=0:raise RuntimeError('Test-user maintenance timed out')
